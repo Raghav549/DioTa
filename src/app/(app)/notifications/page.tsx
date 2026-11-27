@@ -37,7 +37,7 @@ export default function Notifications() {
                     <p className="mt-0.5 text-sm text-muted">{t(`nt.${n.type}.b`, p)}</p>
                     <p className="mt-1.5 text-xs text-muted">{rel(n.createdAt, locale)}</p>
                   </div>
-                  {!n.read && <span className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full bg-primary2" />}
+                  {!n.read && <span className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full bg-[#0d0d0f] dark:bg-white" />}
                 </div>
               );
             })}

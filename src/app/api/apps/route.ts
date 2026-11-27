@@ -2,7 +2,8 @@ import { eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { monitoredApps, privacyEvents } from "@/db/schema";
 import { ApiError, authRoute, readBody } from "@/lib/api";
-import { SENSITIVE, appName } from "@/lib/catalog";
+import { appName } from "@/lib/catalog";
+import { publicApp } from "@/lib/apps";
 import { audit, recordEvent } from "@/lib/events";
 import { appAddSchema } from "@/lib/validation";
 
@@ -16,19 +17,7 @@ export const GET = authRoute(async ({ user }) => {
       .groupBy(privacyEvents.appSlug),
   ]);
   const byApp = new Map(counts.map((c) => [c.slug, c.n]));
-  return {
-    apps: apps.map((a) => ({
-      slug: a.slug,
-      monitoring: a.monitoring,
-      permissions: a.permissions,
-      dataCategories: a.dataCategories,
-      allowUse: a.allowUse,
-      addedAt: a.addedAt.toISOString(),
-      lastObservedAt: a.lastObservedAt?.toISOString() ?? null,
-      events: byApp.get(a.slug) ?? 0,
-      needsReview: a.permissions.some((p) => SENSITIVE.includes(p)),
-    })),
-  };
+  return { apps: apps.map((a) => publicApp(a, byApp.get(a.slug) ?? 0)) };
 });
 
 export const POST = authRoute(async ({ req, user }) => {

@@ -33,6 +33,12 @@ const P = {
   id: "M3 5h18v14H3zM7 10h4M7 14h3M16 12a2 2 0 1 0 0-.01",
   lock: "M5 11h14v10H5zM8 11V7a4 4 0 0 1 8 0v4",
   wifi: "M2 9a15 15 0 0 1 20 0M5 12.5a10 10 0 0 1 14 0M8.5 16a5 5 0 0 1 7 0M12 19.5h.01",
+  edit: "M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4",
+  block: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM5.6 5.6l12.8 12.8",
+  scan: "M4 8V4h4M16 4h4v4M20 16v4h-4M8 20H4v-4M4 12h16",
+  camera: "M4 8h3l2-3h6l2 3h3v11H4zM12 16a3 3 0 1 0 0-6 3 3 0 0 0 0 6z",
+  battery: "M3 8h15v8H3zM21 11v2M6 11v2",
+  chart: "M4 20V10M10 20V4M16 20v-7M22 20H2",
 } as const;
 
 export type IconName = keyof typeof P;

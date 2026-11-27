@@ -72,6 +72,12 @@ Google Cloud Console → APIs & Services → Credentials → OAuth client (Web):
 - **Authorised redirect URI:** `https://your-domain.com/api/auth/google/callback`
   (this must match `APP_URL` exactly)
 
+## 5. Android app
+
+GitHub Actions builds the Android app (`android/`) automatically. It wraps this website. Download `DioTa.apk` from the
+`android-latest` release, or from Actions → Android app → Artifacts. See [android/README.md](android/README.md).
+If your site is not at `https://dio-ta.vercel.app`, set the repository variable `DIOTA_URL` to your URL.
+
 ## Local development
 ```bash
 cp .env.example .env      # fill in DATABASE_URL

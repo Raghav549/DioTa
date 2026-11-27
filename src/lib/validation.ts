@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { passwordOk, passwordRules } from "@/lib/rules";
-import { CATEGORIES, MODES, PERMISSIONS, THEMES, LANGS, APPS } from "@/lib/catalog";
+import { CATEGORIES, MODES, PERMISSIONS, THEMES, LANGS, PKG_RE, isCatalogSlug } from "@/lib/catalog";
 
 export const nameSchema = z.string().trim().min(2).max(80);
 export const emailSchema = z.string().trim().toLowerCase().max(254).regex(/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/);
@@ -48,11 +48,12 @@ export const profileSchema = z
 export const changePasswordSchema = z.object({ current: z.string().min(1).max(128), next: passwordSchema });
 export const passwordOnlySchema = z.object({ password: z.string().min(1).max(128) });
 
-export const appAddSchema = z.object({ slug: z.enum(APPS.map((a) => a.slug) as [string, ...string[]]) });
+export const appAddSchema = z.object({ slug: z.string().max(40).refine(isCatalogSlug) });
 export const appPatchSchema = z
   .object({
     monitoring: z.boolean(),
     allowUse: z.boolean(),
+    blocked: z.boolean(),
     permissions: z.array(z.enum(PERMISSIONS)).max(PERMISSIONS.length),
     dataCategories: z.array(z.enum(CATEGORIES)).max(CATEGORIES.length),
   })
@@ -84,4 +85,31 @@ export const withdrawSchema = z.object({
 export const supportSchema = z.object({
   subject: z.string().trim().min(3).max(120),
   message: z.string().trim().min(10).max(2000),
+});
+
+/* ---------- Android app: real data from the phone ---------- */
+export const pkgSchema = z.string().max(150).regex(PKG_RE);
+export const deviceAppSchema = z.object({
+  pkg: pkgSchema,
+  label: z.string().trim().min(1).max(80),
+  /** Android permissions that are actually granted to the app. */
+  granted: z.array(z.string().max(120)).max(300),
+  /** Mobile + Wi-Fi bytes in the last 30 days (needs usage access). */
+  dataBytes: z.number().int().min(0).max(1e15).nullable().optional(),
+  /** Last time the app was in the foreground, epoch ms (needs usage access). */
+  lastUsed: z.number().int().min(0).max(4102444800000).nullable().optional(),
+  blocked: z.boolean().optional(),
+  blockedAttempts: z.number().int().min(0).max(1e12).optional(),
+  /** Real launcher icon from the phone (PNG data URL), only sent for apps outside the catalog. */
+  icon: z.string().max(40_000).regex(/^data:image\/png;base64,[A-Za-z0-9+/=]+$/).optional(),
+});
+export type DeviceApp = z.infer<typeof deviceAppSchema>;
+export const deviceSyncSchema = z.object({
+  apps: z.array(deviceAppSchema).max(100),
+  /** Packages the user chose to start tracking in this request. */
+  track: z.array(pkgSchema).max(100).optional(),
+});
+
+export const avatarSchema = z.object({
+  dataUrl: z.string().max(400_000).regex(/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/),
 });

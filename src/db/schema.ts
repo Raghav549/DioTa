@@ -33,7 +33,17 @@ export const users = pgTable("users", {
   failedAttempts: integer("failed_attempts").notNull().default(0),
   lockedUntil: ts("locked_until"),
   consentVersion: text("consent_version"),
+  /** Set when the user has a profile picture (the image lives in user_avatars). */
+  avatarUpdatedAt: ts("avatar_updated_at"),
   createdAt: ts("created_at").notNull().defaultNow(),
+});
+
+/** Profile pictures, kept out of `users` so normal requests don't load the image. */
+export const userAvatars = pgTable("user_avatars", {
+  userId: uuid("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
+  mime: text("mime").notNull(),
+  data: text("data").notNull(), // base64
+  updatedAt: ts("updated_at").notNull().defaultNow(),
 });
 
 export const sessions = pgTable(
@@ -63,6 +73,21 @@ export const monitoredApps = pgTable(
     allowUse: boolean("allow_use").notNull().default(false),
     addedAt: ts("added_at").notNull().defaultNow(),
     lastObservedAt: ts("last_observed_at"),
+    /** Display name for apps found on the phone that are not in the catalog. */
+    name: text("name"),
+    /** Android package name when the app was found on the user's phone. */
+    packageName: text("package_name"),
+    /** "manual" (added by hand) or "device" (synced from the Android app). */
+    source: text("source").notNull().default("manual"),
+    /** Real mobile + Wi-Fi traffic in the last 30 days, measured on the phone. Null = not measured. */
+    dataBytes: bigint("data_bytes", { mode: "number" }),
+    lastUsedAt: ts("last_used_at"),
+    /** Internet blocked for this app by the on-device firewall. */
+    blocked: boolean("blocked").notNull().default(false),
+    /** Connection attempts the on-device firewall stopped. */
+    blockedAttempts: bigint("blocked_attempts", { mode: "number" }).notNull().default(0),
+    /** Small PNG data URL of the app's real icon, taken from the phone (only for non-catalog apps). */
+    icon: text("icon"),
   },
   (t) => [uniqueIndex("monitored_user_slug").on(t.userId, t.slug)],
 );

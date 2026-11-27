@@ -1,12 +1,15 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { EventList, type Ev } from "@/components/Activity";
 import { useApp } from "@/components/Providers";
 import { AppLogo, Button, Card, Confirm, Empty, PageHeader, Pill, Skeleton, Toggle } from "@/components/ui";
 import { Icon } from "@/components/Icon";
-import { CATEGORIES, PERMISSIONS, SENSITIVE, appName } from "@/lib/catalog";
-import { api, dateFmt, rel, useApi } from "@/lib/client";
+import { CATEGORIES, PERMISSIONS, SENSITIVE } from "@/lib/catalog";
+import { api, bytes, dateFmt, rel, useApi } from "@/lib/client";
+import { setAppBlocked } from "@/lib/blocking";
+import { packageOf, syncPhone } from "@/lib/deviceSync";
+import { Phone, isNative, useIsNative } from "@/lib/native";
 import type { AppRow } from "../page";
 
 type Detail = { app: Omit<AppRow, "events">; events: Ev[] };
@@ -15,13 +18,36 @@ export default function AppDetail() {
   const { slug } = useParams<{ slug: string }>();
   const { t, locale, toast, errText } = useApp();
   const router = useRouter();
-  const { data, error, reload } = useApi<Detail>(`/api/apps/${slug}`);
+  const { data, error, reload } = useApi<Detail>(`/api/apps/${encodeURIComponent(slug)}`);
   const [confirm, setConfirm] = useState(false);
   const [removing, setRemoving] = useState(false);
+  const native = useIsNative();
+  const [blocking, setBlocking] = useState(false);
+
+  // Android app: refresh this app's real data from the phone when the page opens.
+  useEffect(() => {
+    if (!isNative()) return;
+    syncPhone().then(reload, () => {});
+  }, [reload]);
+
+  async function block(v: boolean) {
+    if (!data) return;
+    setBlocking(true);
+    try {
+      const now = await setAppBlocked(data.app, v);
+      await reload();
+      toast(t(now ? "a.block.on" : "a.block.off", { app: data.app.name }));
+    } catch (e) {
+      const m = e instanceof Error ? e.message : "";
+      toast(m === "firewall_denied" ? t("a.block.need") : errText(e), "err");
+    } finally {
+      setBlocking(false);
+    }
+  }
 
   async function patch(body: Record<string, unknown>) {
     try {
-      await api(`/api/apps/${slug}`, { method: "PATCH", body });
+      await api(`/api/apps/${encodeURIComponent(slug)}`, { method: "PATCH", body });
       await reload();
     } catch (e) {
       toast(errText(e), "err");
@@ -30,7 +56,8 @@ export default function AppDetail() {
   async function remove() {
     setRemoving(true);
     try {
-      await api(`/api/apps/${slug}`, { method: "DELETE" });
+      if (data?.app.blocked && isNative()) await setAppBlocked(data.app, false).catch(() => {});
+      await api(`/api/apps/${encodeURIComponent(slug)}`, { method: "DELETE" });
       router.replace("/apps");
     } catch (e) {
       toast(errText(e), "err");
@@ -41,20 +68,24 @@ export default function AppDetail() {
   if (error) return <><PageHeader title={t("a.title")} back="/apps" /><Card><Empty icon="alert" title={errText(error)} /></Card></>;
   if (!data) return <div className="space-y-4"><Skeleton className="h-32" /><Skeleton className="h-48" /></div>;
   const a = data.app;
-  const name = appName(a.slug);
+  const name = a.name;
+  const fromPhone = a.source === "device";
+  const pkg = packageOf(a);
   const toggleIn = (list: string[], v: string) => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);
 
   return (
     <div className="space-y-4">
       <PageHeader title={name} back="/apps" />
       <Card className="flex items-center gap-4">
-        <AppLogo slug={a.slug} size={72} />
+        <AppLogo slug={a.slug} logo={a.logo} name={a.name} size={72} />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap gap-1.5">
             <Pill tone={a.monitoring ? "good" : "neutral"}>{a.monitoring ? t("a.st.on") : t("a.st.paused")}</Pill>
             <Pill tone={a.needsReview ? "warn" : "good"}>{a.needsReview ? t("a.p.review") : t("a.p.good")}</Pill>
+            {fromPhone && <Pill>{t("a.src.device")}</Pill>}
           </div>
-          <p className="mt-2 text-sm text-muted">{t("a.last")}: {a.lastObservedAt ? rel(a.lastObservedAt, locale) : t("a.never")}</p>
+          {a.packageName && <p className="mt-2 truncate font-mono text-xs text-muted">{a.packageName}</p>}
+          <p className="mt-1 text-sm text-muted">{t("a.last")}: {a.lastObservedAt ? rel(a.lastObservedAt, locale) : t("a.never")}</p>
           <p className="text-xs text-muted">{t("a.added")}: {dateFmt(a.addedAt, locale)}</p>
         </div>
       </Card>
@@ -80,15 +111,31 @@ export default function AppDetail() {
         </div>
       </Card>
 
+      <Card className={a.blocked ? "!border-bad/40" : ""}>
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex min-w-0 gap-3">
+            <span className={`grid h-11 w-11 shrink-0 place-items-center rounded-2xl ${a.blocked ? "bg-bad/15 text-bad" : "bg-track text-fg"}`}><Icon name="block" size={20} /></span>
+            <div className="min-w-0">
+              <p className="font-bold">{t("a.block")}</p>
+              <p className="text-sm text-muted">{native ? t("a.block.d") : t("a.block.web")}</p>
+            </div>
+          </div>
+          <Toggle checked={a.blocked} disabled={!native || blocking || !pkg} onChange={block} label={t("a.block")} />
+        </div>
+        {(a.blocked || a.blockedAttempts > 0) && (
+          <p className="mt-3 rounded-2xl bg-track/60 px-4 py-2.5 text-sm font-semibold">{t("a.block.attempts", { n: a.blockedAttempts })}</p>
+        )}
+      </Card>
+
       <Card>
         <h2 className="text-lg font-bold">{t("a.perms")}</h2>
-        <p className="mb-4 mt-1 text-sm text-muted">{t("a.perms.hint")}</p>
+        <p className="mb-4 mt-1 text-sm text-muted">{fromPhone ? t("a.perms.real") : t("a.perms.hint")}</p>
         <div className="flex flex-wrap gap-2">
           {PERMISSIONS.map((p) => {
             const on = a.permissions.includes(p);
             const sens = SENSITIVE.includes(p);
             return (
-              <button key={p} role="switch" aria-checked={on} onClick={() => patch({ permissions: toggleIn(a.permissions, p) })} className={`flex items-center gap-2 rounded-full border px-4 py-2.5 text-sm font-semibold transition-colors ${on ? (sens ? "border-warn/50 bg-warn/15 text-warn" : "border-primary bg-primary/15 text-primary") : "border-line bg-surface text-muted"}`}>
+              <button key={p} role="switch" aria-checked={on} disabled={fromPhone} onClick={() => patch({ permissions: toggleIn(a.permissions, p) })} className={`flex items-center gap-2 rounded-full border px-4 py-2.5 text-sm font-semibold transition-colors disabled:cursor-default ${on ? (sens ? "border-warn/50 bg-warn/15 text-warn" : "border-primary bg-primary/15 text-primary") : "border-line bg-surface text-muted"}`}>
                 {on && <Icon name="check" size={14} stroke={3} />}
                 {t(`perm.${p}`)}
               </button>
@@ -96,6 +143,11 @@ export default function AppDetail() {
           })}
         </div>
         {a.permissions.length === 0 && <p className="mt-3 text-xs text-muted">{t("a.perms.none")}</p>}
+        {native && pkg && (
+          <Button variant="soft" full className="mt-4" onClick={() => Phone.openAppSettings(pkg).catch((e) => toast(errText(e), "err"))}>
+            <Icon name="device" size={18} />{t("a.settings")}
+          </Button>
+        )}
       </Card>
 
       <Card>
@@ -111,8 +163,13 @@ export default function AppDetail() {
             );
           })}
         </div>
-        <div className="mt-5 grid grid-cols-2 gap-3 border-t border-line pt-4">
-          <div><p className="text-xs text-muted">{t("a.volume")}</p><p className="text-sm font-semibold">{t("a.volume.na")}</p></div>
+        <div className="mt-5 grid grid-cols-2 gap-4 border-t border-line pt-4">
+          <div>
+            <p className="text-xs text-muted">{t("a.volume")}</p>
+            <p className="text-sm font-semibold">{a.dataBytes != null ? bytes(a.dataBytes, locale) : native ? t("a.volume.need") : t("a.volume.na")}</p>
+            {a.dataBytes != null && <p className="text-[11px] text-muted">{t("a.volume.d")}</p>}
+          </div>
+          <div><p className="text-xs text-muted">{t("a.lastused")}</p><p className="text-sm font-semibold">{a.lastUsedAt ? rel(a.lastUsedAt, locale) : t("c.na")}</p></div>
           <div><p className="text-xs text-muted">{t("a.events")}</p><p className="text-sm font-semibold">{data.events.length}</p></div>
         </div>
       </Card>

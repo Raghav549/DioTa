@@ -1,0 +1,61 @@
+plugins {
+    id "com.android.application"
+}
+
+def siteUrl = (project.findProperty("diotaUrl") ?: "https://dio-ta.vercel.app").toString().replaceAll('/+$', '')
+def versionCodeProp = (project.findProperty("versionCode") ?: "1").toString().toInteger()
+def versionNameProp = (project.findProperty("versionName") ?: "1.0.0").toString()
+
+// Release signing comes from environment variables (GitHub Actions secrets). Without them the
+// release APK is signed with the debug key so it can still be installed.
+def ksFile = System.getenv("ANDROID_KEYSTORE_FILE")
+def hasReleaseKey = ksFile != null && !ksFile.isEmpty() && file(ksFile).exists()
+
+android {
+    namespace "app.diota"
+    compileSdk 35
+
+    defaultConfig {
+        applicationId "app.diota"
+        minSdk 29
+        targetSdk 35
+        versionCode versionCodeProp
+        versionName versionNameProp
+        buildConfigField "String", "SITE_URL", "\"${siteUrl}\""
+    }
+
+    signingConfigs {
+        if (hasReleaseKey) {
+            release {
+                storeFile file(ksFile)
+                storeType "pkcs12"
+                storePassword System.getenv("ANDROID_KEYSTORE_PASSWORD")
+                keyAlias System.getenv("ANDROID_KEY_ALIAS")
+                keyPassword System.getenv("ANDROID_KEYSTORE_PASSWORD")
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
+            signingConfig hasReleaseKey ? signingConfigs.release : signingConfigs.debug
+        }
+    }
+
+    buildFeatures {
+        buildConfig true
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    lint {
+        abortOnError false
+        checkReleaseBuilds false
+    }
+}

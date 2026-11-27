@@ -4,6 +4,7 @@ import { monitoredApps, privacyEvents, vaultItems } from "@/db/schema";
 import { authRoute } from "@/lib/api";
 import { SENSITIVE } from "@/lib/catalog";
 import { walletSummary } from "@/lib/wallet";
+import { publicApp } from "@/lib/apps";
 
 export const GET = authRoute(async ({ user }) => {
   const uid = user.id;
@@ -32,6 +33,10 @@ export const GET = authRoute(async ({ user }) => {
     protectionEnabled: user.protectionEnabled,
     monitoringEnabled: user.monitoringEnabled,
     appsMonitored: monitored.length,
+    /** True once the Android app has synced real data from this user's phone. */
+    deviceConnected: apps.some((a) => a.source === "device"),
+    blockedApps: apps.filter((a) => a.blocked).length,
+    blockedAttempts: apps.reduce((n, a) => n + (a.blockedAttempts ?? 0), 0),
     appsTotal: apps.length,
     alerts,
     eventsTotal: evCount.n,
@@ -40,6 +45,7 @@ export const GET = authRoute(async ({ user }) => {
     dataItems: stored.items,
     wallet: { month: w.month, available: w.available, pending: w.pending, lifetime: w.lifetime },
     recentTx: w.transactions.slice(0, 4),
+    logos: apps.slice(0, 3).map((a) => ({ slug: a.slug, logo: publicApp(a).logo, name: publicApp(a).name })),
     recentEvents: recent.map((e) => ({ id: e.id, type: e.type, params: e.params, appSlug: e.appSlug, createdAt: e.createdAt.toISOString() })),
   };
 });

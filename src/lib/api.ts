@@ -70,9 +70,9 @@ export function publicRoute<P = Record<string, string>>(
     run(req, ctx, opts, false, fn as Parameters<typeof run<P>>[4]);
 }
 
-export async function readBody<T>(req: NextRequest, schema: ZodType<T>): Promise<T> {
+export async function readBody<T>(req: NextRequest, schema: ZodType<T>, maxChars = 100_000): Promise<T> {
   const text = await req.text();
-  if (text.length > 100_000) throw new ApiError("invalid_input", 413);
+  if (text.length > maxChars) throw new ApiError("invalid_input", 413);
   let json: unknown;
   try {
     json = JSON.parse(text || "{}");
