@@ -50,7 +50,7 @@ export function TxList({ items }: { items: Tx[] }) {
         const out = x.type === "withdrawal";
         return (
           <li key={x.id} className="flex items-center gap-3.5 py-3.5">
-            <span className={`grid h-11 w-11 shrink-0 place-items-center rounded-2xl ${out ? "bg-surface-2 text-fg" : "bg-good/15 text-good"}`}>
+            <span className={`grid h-11 w-11 shrink-0 place-items-center rounded-2xl ${out ? "bg-track/60 text-fg" : "bg-good/15 text-good"}`}>
               <Icon name={out ? "up" : "down"} size={19} />
             </span>
             <div className="min-w-0 flex-1">
@@ -59,7 +59,7 @@ export function TxList({ items }: { items: Tx[] }) {
                 {rel(x.createdAt, locale)} · {t(`tx.${x.status}`)}
               </p>
             </div>
-            <span className={`rounded-xl px-3 py-1.5 text-sm font-bold ${out ? "bg-surface-2" : "bg-good/15 text-good"}`}>
+            <span className={`rounded-xl px-3 py-1.5 text-sm font-bold ${out ? "bg-track/60" : "bg-good/15 text-good"}`}>
               {out ? "−" : "+"}
               {money(x.amountPaise, locale)}
             </span>

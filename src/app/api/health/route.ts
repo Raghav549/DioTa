@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db } from "@/db";
 import { ensureSchema } from "@/db/migrate";
-import { configProblems, databaseUrl, parseEncryptionKey } from "@/lib/config";
+import { configProblems, configWarnings, databaseUrl, envEncryptionKey } from "@/lib/config";
 
 export const dynamic = "force-dynamic";
 
@@ -12,21 +12,21 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   const checks = {
     databaseUrl: !!databaseUrl(),
-    encryptionKey: "key" in parseEncryptionKey(process.env.DATA_ENCRYPTION_KEY),
     databaseConnection: false,
     databaseTables: false,
+    encryption: "unavailable" as "env-key" | "auto-key" | "unavailable",
   };
   const problems = configProblems();
   if (checks.databaseUrl) {
     try {
       await db.execute(sql`select 1`);
       checks.databaseConnection = true;
-      await ensureSchema();
+      await ensureSchema(); // creates tables and the auto key if needed
       await db.execute(sql`select 1 from users limit 1`);
       checks.databaseTables = true;
+      checks.encryption = envEncryptionKey() ? "env-key" : "auto-key";
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "unknown";
-      console.error("[health] database check failed:", msg);
+      console.error("[health] database check failed:", e instanceof Error ? e.message : "unknown");
       problems.push(
         checks.databaseConnection
           ? "Database tables could not be created (check that the database user can create tables)"
@@ -35,8 +35,14 @@ export async function GET() {
     }
   }
   const ok = problems.length === 0;
+  const warnings = configWarnings();
   return Response.json(
-    { ok, checks, ...(ok ? {} : { problems, fix: "Vercel → Project → Settings → Environment Variables, then Deployments → Redeploy" }) },
+    {
+      ok,
+      checks,
+      ...(warnings.length ? { warnings } : {}),
+      ...(ok ? {} : { problems, fix: "Vercel → Project → Settings → Environment Variables, then Deployments → Redeploy" }),
+    },
     { status: ok ? 200 : 503, headers: { "Cache-Control": "no-store" } },
   );
 }

@@ -15,8 +15,18 @@ function Item({ icon, title, value, tone = "neutral" }: { icon: IconName; title:
   return (
     <li className="flex items-center gap-3.5 py-3.5">
       <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-primary/12 text-primary"><Icon name={icon} size={20} /></span>
-      <span className="flex-1 font-semibold">{title}</span>
-      <Pill tone={tone}>{value}</Pill>
+      {value.length > 14 ? (
+        // Long values (e.g. "Not available in a web app") go under the title so nothing gets squeezed.
+        <span className="min-w-0 flex-1">
+          <span className="block font-semibold">{title}</span>
+          <span className={`mt-0.5 block text-xs font-semibold ${tone === "good" ? "text-good" : tone === "warn" ? "text-warn" : "text-muted"}`}>{value}</span>
+        </span>
+      ) : (
+        <>
+          <span className="min-w-0 flex-1 font-semibold">{title}</span>
+          <Pill tone={tone} className="shrink-0 whitespace-nowrap">{value}</Pill>
+        </>
+      )}
     </li>
   );
 }

@@ -1,3 +1,5 @@
+import crypto from "node:crypto";
+
 /**
  * Server configuration checks. Pure (no Next.js imports) so it can be unit-tested.
  * Never returns secret values, only whether each setting is usable.
@@ -22,16 +24,35 @@ export function parseEncryptionKey(raw: string | undefined): { key: Buffer } | {
 
 export const databaseUrl = () => process.env.DATABASE_URL ?? process.env.POSTGRES_URL;
 
-const isHosted = () => process.env.NODE_ENV === "production" || !!process.env.VERCEL;
+/**
+ * The DATA_ENCRYPTION_KEY as a 32-byte key, or null when it is not set (the app then uses its
+ * auto-generated database key). A value that is set but not in the strict format (e.g. a long
+ * passphrase) is accepted by hashing it, so a formatting mistake never blocks sign-up.
+ * Values shorter than 16 characters are too weak and are ignored (reported in /api/health).
+ */
+export function envEncryptionKey(): Buffer | null {
+  const raw = process.env.DATA_ENCRYPTION_KEY;
+  const parsed = parseEncryptionKey(raw);
+  if ("key" in parsed) return parsed.key;
+  const v = (raw ?? "").trim();
+  if (v.length >= 16) return crypto.createHash("sha256").update(`dioTa-env-key:${v}`).digest();
+  return null;
+}
 
 /** Problems that make the app unusable. Empty array = configuration OK. */
 export function configProblems(): string[] {
-  const problems: string[] = [];
-  if (!databaseUrl()) problems.push("DATABASE_URL is not set");
-  const k = parseEncryptionKey(process.env.DATA_ENCRYPTION_KEY);
-  // Locally a key file is generated automatically, so only an *invalid* key is a problem there.
-  if ("error" in k && (isHosted() || process.env.DATA_ENCRYPTION_KEY)) problems.push(k.error);
-  return problems;
+  return databaseUrl() ? [] : ["DATABASE_URL is not set"];
+}
+
+/** Non-blocking recommendations shown in /api/health. */
+export function configWarnings(): string[] {
+  const raw = (process.env.DATA_ENCRYPTION_KEY ?? "").trim();
+  const strict = "key" in parseEncryptionKey(raw);
+  if (!raw)
+    return ["DATA_ENCRYPTION_KEY is not set: the app is using an auto-generated key stored in the database. Add DATA_ENCRYPTION_KEY for stronger protection (see DEPLOY.md)."];
+  if (raw.length < 16) return ["DATA_ENCRYPTION_KEY is too short and is being ignored: use a 44-character base64 value (see DEPLOY.md)."];
+  if (!strict) return ["DATA_ENCRYPTION_KEY is not a 44-character base64 value; it is being accepted by hashing it."];
+  return [];
 }
 
 export class ConfigError extends Error {

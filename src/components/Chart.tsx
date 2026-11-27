@@ -33,7 +33,7 @@ export function Chart({ data, format, height = 170, color = "var(--good)" }: { d
   const area = `${line} L 100 40 L 0 40 Z`;
   const idx = active ?? n - 1;
   const cur = pts[idx];
-  const labelStep = Math.ceil(n / 6);
+  const labelStep = Math.max(1, Math.ceil((n - 1) / 4)); // at most ~5 labels so they never collide on small phones
 
   return (
     <div>
@@ -76,8 +76,12 @@ export function Chart({ data, format, height = 170, color = "var(--good)" }: { d
               transition={{ type: "spring", stiffness: 400, damping: 34 }}
             />
             <motion.div
-              className="glass-solid absolute -translate-x-1/2 whitespace-nowrap rounded-2xl px-3 py-1.5 text-center text-xs font-bold"
-              animate={{ left: `${Math.min(88, Math.max(12, cur[0]))}%`, top: `${Math.max(0, (cur[1] / 40) * 100 - 26)}%` }}
+              className="glass-solid absolute whitespace-nowrap rounded-2xl px-3 py-1.5 text-center text-xs font-bold"
+              animate={{
+                left: `${cur[0]}%`,
+                x: cur[0] > 70 ? "-100%" : cur[0] < 30 ? "0%" : "-50%",
+                top: `${Math.max(0, (cur[1] / 40) * 100 - 26)}%`,
+              }}
               transition={{ type: "spring", stiffness: 400, damping: 34 }}
             >
               {format(data[idx].value)}
@@ -87,8 +91,8 @@ export function Chart({ data, format, height = 170, color = "var(--good)" }: { d
       </div>
       <div className="mt-3 flex justify-between text-xs text-muted">
         {data.map((d, i) =>
-          i % labelStep === 0 || i === n - 1 ? (
-            <span key={i} className={i === idx ? "font-bold text-fg" : ""}>
+          i === n - 1 || (i % labelStep === 0 && n - 1 - i >= labelStep / 2) ? (
+            <span key={i} className={`whitespace-nowrap ${i === idx ? "font-bold text-fg" : ""}`}>
               {d.label}
             </span>
           ) : (

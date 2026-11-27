@@ -79,7 +79,7 @@ export default function Signup() {
         </button>
         <div className="flex flex-1 gap-1.5" role="progressbar" aria-valuemin={1} aria-valuemax={KEYS.length} aria-valuenow={step + 1}>
           {KEYS.map((_, n) => (
-            <div key={n} className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface-2">
+            <div key={n} className="h-1.5 flex-1 overflow-hidden rounded-full bg-track">
               <motion.div className="h-full rounded-full btn-primary" initial={false} animate={{ width: n <= step ? "100%" : "0%" }} transition={{ duration: 0.5, ease: "easeOut" }} />
             </div>
           ))}
@@ -156,7 +156,7 @@ function Rules({ pw, extra }: { pw: string; extra?: { label: string; ok: boolean
     <ul className="mt-4 space-y-2">
       {items.map((r) => (
         <li key={r.label} className={`flex items-center gap-2.5 text-sm transition-colors ${r.ok ? "text-good" : "text-muted"}`}>
-          <span className={`grid h-5 w-5 place-items-center rounded-full ${r.ok ? "bg-good/20" : "bg-surface-2"}`}>{r.ok && <Icon name="check" size={12} stroke={3} />}</span>
+          <span className={`grid h-5 w-5 place-items-center rounded-full ${r.ok ? "bg-good/20" : "bg-track"}`}>{r.ok && <Icon name="check" size={12} stroke={3} />}</span>
           {r.label}
         </li>
       ))}

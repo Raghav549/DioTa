@@ -1,62 +1,60 @@
 import crypto from "node:crypto";
-import fs from "node:fs";
-import path from "node:path";
 import { promisify } from "node:util";
-import { ConfigError, parseEncryptionKey } from "@/lib/config";
+import { ConfigError, envEncryptionKey } from "@/lib/config";
 
-/* ---------- master key ---------- */
-let master: Buffer | null = null;
-
-/**
- * Production (and any serverless host) MUST provide DATA_ENCRYPTION_KEY.
- * Serverless filesystems are read-only and per-instance, so a generated key file would
- * differ between instances and make encrypted data unreadable. The file fallback exists
- * only for local development.
+/* ---------- keys ----------
+ *
+ * Two possible master keys:
+ *  - ENV key: DATA_ENCRYPTION_KEY (recommended). It lives outside the database, so a database
+ *    dump alone cannot decrypt vault data.
+ *  - DB key: generated automatically on first start and stored in the `app_secrets` table. It
+ *    means the app works with only DATABASE_URL configured.
+ *
+ * Every ciphertext records which key encrypted it ("v1" = env key, "v2" = DB key), so adding
+ * DATA_ENCRYPTION_KEY later never makes existing data unreadable. New data then uses the env key.
+ * Keyed hashes (recovery keys, IP fingerprints) always use the DB key when it is available, so
+ * they stay stable when the env key is added or changed.
  */
-function masterKey(): Buffer {
-  if (master) return master;
-  const parsed = parseEncryptionKey(process.env.DATA_ENCRYPTION_KEY);
-  if ("key" in parsed) {
-    master = parsed.key;
-    return master;
-  }
-  if (process.env.DATA_ENCRYPTION_KEY?.trim() || process.env.NODE_ENV === "production" || process.env.VERCEL) {
-    throw new ConfigError([parsed.error]);
-  }
-  const dir = path.join(process.cwd(), ".data");
-  const file = path.join(dir, "master.key");
-  fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
-  try {
-    fs.writeFileSync(file, crypto.randomBytes(32).toString("base64"), { mode: 0o600, flag: "wx" });
-  } catch {
-    /* already exists */
-  }
-  const key = Buffer.from(fs.readFileSync(file, "utf8").trim(), "base64");
-  if (key.length !== 32) throw new Error(".data/master.key is corrupt");
-  master = key;
-  return master;
+const g = globalThis as typeof globalThis & { __dioTaDbKey?: Buffer };
+
+/** Called once per instance after the database is ready (see src/db/migrate.ts). */
+export function registerDbKey(key: Buffer) {
+  if (key.length !== 32) throw new Error("stored app key is corrupt");
+  g.__dioTaDbKey = key;
+}
+
+const dbKey = () => g.__dioTaDbKey ?? null;
+
+function noKey(): never {
+  throw new ConfigError(["No encryption key available (database not reachable and DATA_ENCRYPTION_KEY not set)"]);
+}
+
+function keyFor(version: "v1" | "v2"): Buffer {
+  if (version === "v1") return envEncryptionKey() ?? noKey();
+  return dbKey() ?? noKey();
 }
 
 /** Each user gets their own key derived from the master key (HKDF-SHA256). */
-function userKey(userId: string): Buffer {
-  return Buffer.from(crypto.hkdfSync("sha256", masterKey(), Buffer.alloc(0), `dioTa:user:${userId}`, 32));
+function userKey(master: Buffer, userId: string): Buffer {
+  return Buffer.from(crypto.hkdfSync("sha256", master, Buffer.alloc(0), `dioTa:user:${userId}`, 32));
 }
 
 const b64 = (b: Buffer) => b.toString("base64url");
 
 /** AES-256-GCM, authenticated and bound to the owning user id. */
 export function encrypt(userId: string, plain: string): string {
+  const version = envEncryptionKey() ? "v1" : "v2";
   const iv = crypto.randomBytes(12);
-  const c = crypto.createCipheriv("aes-256-gcm", userKey(userId), iv);
+  const c = crypto.createCipheriv("aes-256-gcm", userKey(keyFor(version), userId), iv);
   c.setAAD(Buffer.from(userId));
   const ct = Buffer.concat([c.update(plain, "utf8"), c.final()]);
-  return `v1.${b64(iv)}.${b64(c.getAuthTag())}.${b64(ct)}`;
+  return `${version}.${b64(iv)}.${b64(c.getAuthTag())}.${b64(ct)}`;
 }
 
 export function decrypt(userId: string, payload: string): string {
   const [v, iv, tag, ct] = payload.split(".");
-  if (v !== "v1" || !iv || !tag || !ct) throw new Error("bad payload");
-  const d = crypto.createDecipheriv("aes-256-gcm", userKey(userId), Buffer.from(iv, "base64url"));
+  if ((v !== "v1" && v !== "v2") || !iv || !tag || !ct) throw new Error("bad payload");
+  const d = crypto.createDecipheriv("aes-256-gcm", userKey(keyFor(v), userId), Buffer.from(iv, "base64url"));
   d.setAAD(Buffer.from(userId));
   d.setAuthTag(Buffer.from(tag, "base64url"));
   return Buffer.concat([d.update(Buffer.from(ct, "base64url")), d.final()]).toString("utf8");
@@ -67,7 +65,10 @@ export const sha256 = (v: string) => crypto.createHash("sha256").update(v).diges
 
 /** Keyed hash used for pseudonymous identifiers (IP addresses, partner references). */
 export const hmac = (purpose: string, v: string) =>
-  crypto.createHmac("sha256", masterKey()).update(`${purpose}:${v}`).digest("hex");
+  crypto
+    .createHmac("sha256", dbKey() ?? envEncryptionKey() ?? noKey())
+    .update(`${purpose}:${v}`)
+    .digest("hex");
 
 export function safeEqual(a: string, b: string): boolean {
   const x = Buffer.from(a);
@@ -120,10 +121,20 @@ export const dummyHash = () => (dummy ??= hashPassword("dioTa-dummy-password-1!"
 /* ---------- recovery key (100 bits of randomness) ---------- */
 const ALPHABET = "ABCDEFGHJKMNPQRSTVWXYZ23456789";
 export function generateRecoveryKey(): string {
-  const bytes = crypto.randomBytes(20);
+  // crypto.randomInt is uniform (no modulo bias).
   let s = "";
-  for (const b of bytes) s += ALPHABET[b % ALPHABET.length];
+  for (let i = 0; i < 20; i++) s += ALPHABET[crypto.randomInt(ALPHABET.length)];
   return s.match(/.{4}/g)!.join("-");
 }
 export const normalizeRecoveryKey = (k: string) => k.toUpperCase().replace(/[^A-Z0-9]/g, "");
 export const hashRecoveryKey = (k: string) => hmac("recovery", normalizeRecoveryKey(k));
+/**
+ * Every hash a recovery key may have been stored under: the current key first, then the env key.
+ * Keeps recovery working for accounts created on a deployment that only had DATA_ENCRYPTION_KEY.
+ */
+export function recoveryKeyCandidates(k: string): string[] {
+  const v = `recovery:${normalizeRecoveryKey(k)}`;
+  const keys = [dbKey(), envEncryptionKey()].filter((x): x is Buffer => !!x);
+  if (!keys.length) noKey();
+  return [...new Set(keys.map((key) => crypto.createHmac("sha256", key).update(v).digest("hex")))];
+}

@@ -97,7 +97,7 @@ export default function WalletPage() {
         </Card>
       )}
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 [&>*]:min-w-0">
         {[
           [t("w.lifetime"), money(w.lifetime, locale)],
           [t("w.month"), money(w.month, locale)],
