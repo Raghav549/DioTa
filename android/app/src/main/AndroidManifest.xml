@@ -50,6 +50,31 @@
             </intent-filter>
         </activity>
 
+        <!-- DioTa browser: links opened with DioTa load with the anti-fingerprinting shield, tracker
+             blocking and privacy headers on every page. DioTa appears in Android's "Open with" list
+             and can be picked as the default browser. -->
+        <activity
+            android:name=".BrowserActivity"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:launchMode="singleTask"
+            android:taskAffinity="app.diota.browser"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|uiMode|density"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="http" />
+                <data android:scheme="https" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+        </activity>
+
         <!-- Tracker shield + app firewall: a local VPN. Shield: only DNS lookups pass through it, tracker
              endpoints are refused. Firewall: the apps you block are captured and their traffic dropped. -->
         <service

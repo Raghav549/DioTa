@@ -49,7 +49,8 @@ android {
         buildConfig true
     }
 
-    // The tracker list is shared with the website (src/lib/data/trackers.json): one source of truth.
+    // The tracker list (src/lib/data/trackers.json) and the anti-fingerprinting shield
+    // (src/lib/data/privacy-shield.js) are shared with the website: one source of truth.
     sourceSets {
         main {
             assets.srcDirs += ["../../src/lib/data"]

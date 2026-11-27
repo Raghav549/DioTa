@@ -40,6 +40,8 @@ import android.widget.TextView;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
 /**
@@ -53,6 +55,14 @@ import java.util.concurrent.ConcurrentLinkedQueue;
  * edge to edge; the status/navigation bar sizes are handed to it as CSS variables.
  */
 public class MainActivity extends Activity {
+    /** Global Privacy Control and Do Not Track on the app's page loads. */
+    private static final Map<String, String> PRIVACY_HEADERS = new HashMap<>();
+
+    static {
+        PRIVACY_HEADERS.put("Sec-GPC", "1");
+        PRIVACY_HEADERS.put("DNT", "1");
+    }
+
     static final int REQ_PERMS = 41;
     static final int REQ_VPN = 42;
     static final int REQ_SETTINGS = 43;
@@ -105,7 +115,9 @@ public class MainActivity extends Activity {
 
         root.setOnApplyWindowInsetsListener((v, insets) -> {
             applyInsets(insets);
-            return WindowInsets.CONSUMED; // the WebView gets none: the page uses the CSS variables instead
+            // The WebView gets none: the page uses the CSS variables instead. (WindowInsets.CONSUMED
+            // only exists from Android 11; this works on Android 10 too.)
+            return Build.VERSION.SDK_INT >= Build.VERSION_CODES.R ? WindowInsets.CONSUMED : insets.consumeSystemWindowInsets().consumeStableInsets();
         });
         setContentView(root);
 
@@ -158,7 +170,7 @@ public class MainActivity extends Activity {
         // launch=native: the website skips its own splash (this one already played) and opens the
         // right screen at once: Home when signed in, the intro for someone new, else sign-in.
         if (savedInstanceState != null) web.restoreState(savedInstanceState);
-        else web.loadUrl(BuildConfig.SITE_URL + "/?launch=native");
+        else web.loadUrl(BuildConfig.SITE_URL + "/?launch=native", PRIVACY_HEADERS);
     }
 
     // ---------- edge to edge ----------
@@ -455,7 +467,7 @@ public class MainActivity extends Activity {
             offline.setVisibility(View.GONE);
             String url = web == null ? null : web.getUrl();
             if (web == null) return;
-            if (url == null || !isTrusted(Uri.parse(url))) web.loadUrl(BuildConfig.SITE_URL + "/home");
+            if (url == null || !isTrusted(Uri.parse(url))) web.loadUrl(BuildConfig.SITE_URL + "/home", PRIVACY_HEADERS);
             else web.reload();
         });
         box.addView(retry, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
