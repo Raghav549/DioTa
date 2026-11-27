@@ -43,7 +43,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
   return (
     <html lang={lang} data-theme={theme} {...app} suppressHydrationWarning>
       <head>
-        {/* Anti-fingerprinting shield (public/privacy-shield.js): runs before every other script. */}
+        {/* Anti-fingerprinting shield (src/lib/data/privacy-shield.js): runs before every other script. */}
         {shield && <script nonce={nonce} dangerouslySetInnerHTML={{ __html: shield }} />}
       </head>
       <body className="antialiased">

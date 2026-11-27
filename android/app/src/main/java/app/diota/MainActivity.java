@@ -115,7 +115,9 @@ public class MainActivity extends Activity {
 
         root.setOnApplyWindowInsetsListener((v, insets) -> {
             applyInsets(insets);
-            return WindowInsets.CONSUMED; // the WebView gets none: the page uses the CSS variables instead
+            // The WebView gets none: the page uses the CSS variables instead. (WindowInsets.CONSUMED
+            // only exists from Android 11; this works on Android 10 too.)
+            return Build.VERSION.SDK_INT >= Build.VERSION_CODES.R ? WindowInsets.CONSUMED : insets.consumeSystemWindowInsets().consumeStableInsets();
         });
         setContentView(root);
 

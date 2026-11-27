@@ -1,6 +1,6 @@
 /*
  * DioTa privacy shield. Loaded first in <head> (before any other script) on every DioTa page, in the
- * browser and in the Android app. It turns off or blurs the browser features used to fingerprint a
+ * browser and in the Android app, and on every site opened in the DioTa browser. It turns off or blurs the browser features used to fingerprint a
  * device, so no script running on the page can build a stable ID of the phone:
  *
  *  - Global Privacy Control / Do Not Track signals set (navigator.globalPrivacyControl, doNotTrack).
@@ -13,6 +13,9 @@
  *  - Media devices: an empty list until the user has granted camera / microphone access.
  *  - WebRTC: relay-only ICE, and host / server-reflexive candidates are dropped, so no local or
  *    public IP address can leak through it.
+ *
+ * The same file is packaged into the Android app (src/lib/data is an asset folder), whose browser
+ * ("Open with DioTa") injects it into every page before the page's own scripts.
  *
  * Every attempt is counted and announced (window event "dt:fingerprint", detail {api, at}) and kept
  * in window.__dtShield.attempts. Plain ES5-compatible code with no dependencies; it never throws.
@@ -33,6 +36,9 @@
       attempts.push(e);
       if (attempts.length > 200) attempts.shift();
       window.dispatchEvent(new CustomEvent("dt:fingerprint", { detail: e }));
+      // In the DioTa Android browser, the attempt is also passed to the app (for the Vault and the
+      // Activities stream) through a console line it watches for.
+      if (window.__dtFpLog) console.debug("[dt-fp] " + api);
     } catch (_) {}
   }
 

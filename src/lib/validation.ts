@@ -126,6 +126,13 @@ export const interceptSchema = z.object({
   /** Epoch ms of the first and last attempt in this batch. */
   first: z.number().int().min(0).max(4102444800000),
   last: z.number().int().min(0).max(4102444800000),
+  /**
+   * DioTa browser only: the fingerprinting API a page tried to read (canvas, webgl, audio, ...).
+   * The domain is then the page's host, which needn't be a known tracker.
+   */
+  fp: z.string().regex(/^[A-Za-z]{2,24}$/).optional(),
+  /** DioTa browser only: what a blocked tracker request carried in its URL (kept encrypted). */
+  payload: z.string().max(1000).optional(),
 });
 export type InterceptIn = z.infer<typeof interceptSchema>;
 export const interceptBatchSchema = z.object({ events: z.array(interceptSchema).min(1).max(200) });

@@ -74,16 +74,18 @@ final class InterceptStore {
     private final AtomicBoolean quickScheduled = new AtomicBoolean(false);
 
     private static final class Agg {
-        final String pkg, label, domain, trigger;
+        final String pkg, label, domain, trigger, fp;
         final boolean app;
+        String payload;
         long count, first, last;
 
-        Agg(String pkg, String label, String domain, String trigger, boolean app, long now) {
+        Agg(String pkg, String label, String domain, String trigger, boolean app, String fp, long now) {
             this.pkg = pkg;
             this.label = label;
             this.domain = domain;
             this.trigger = trigger;
             this.app = app;
+            this.fp = fp;
             this.first = now;
         }
     }
@@ -119,6 +121,14 @@ final class InterceptStore {
 
     /** Records one blocked attempt. Cheap and thread-safe: called from the DNS worker threads. */
     void record(String pkg, String label, String domain, String trigger, boolean wholeApp) {
+        record(pkg, label, domain, trigger, wholeApp, null, null);
+    }
+
+    /**
+     * DioTa browser: a page tried to read a fingerprinting API (fp, with domain = the page's host),
+     * or a blocked tracker request carried data in its URL (payload, kept encrypted in the account).
+     */
+    void record(String pkg, String label, String domain, String trigger, boolean wholeApp, String fp, String payload) {
         if (paused) return;
         long now = System.currentTimeMillis();
         Listener l = listener;
@@ -130,7 +140,10 @@ final class InterceptStore {
                 o.put("domain", domain);
                 o.put("trigger", trigger);
                 o.put("app", wholeApp);
-                if (!wholeApp) {
+                if (fp != null) {
+                    o.put("org", domain);
+                    o.put("kind", "fingerprint");
+                } else if (!wholeApp) {
                     String[] t = Trackers.match(domain);
                     if (t != null) {
                         o.put("org", t[0]);
@@ -142,9 +155,10 @@ final class InterceptStore {
             } catch (Exception ignored) {
             }
         }
-        String key = pkg + '|' + domain + '|' + trigger + '|' + wholeApp;
+        String key = pkg + '|' + domain + '|' + trigger + '|' + wholeApp + '|' + (fp == null ? "" : fp);
         pending.compute(key, (k, a) -> {
-            if (a == null) a = new Agg(pkg, label, domain, trigger, wholeApp, now);
+            if (a == null) a = new Agg(pkg, label, domain, trigger, wholeApp, fp, now);
+            if (payload != null && !payload.isEmpty()) a.payload = payload.length() > 1000 ? payload.substring(0, 1000) : payload;
             a.count++;
             a.last = now;
             return a;
@@ -243,6 +257,8 @@ final class InterceptStore {
             o.put("domain", a.domain);
             o.put("trigger", a.trigger);
             if (a.app) o.put("app", true);
+            if (a.fp != null) o.put("fp", a.fp);
+            if (a.payload != null) o.put("payload", a.payload);
             o.put("count", a.count);
             o.put("first", a.first);
             o.put("last", a.last);

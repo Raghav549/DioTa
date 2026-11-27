@@ -22,9 +22,16 @@ export type Intercept = {
   count: number;
   firstAt: string;
   at: string;
+  /** DioTa browser: the fingerprinting API a page tried to read. */
+  fp?: string;
+  /** DioTa browser: what the blocked tracker request carried (shown to and exported by its owner). */
+  payload?: string;
 };
 
-type Detail = { app: string; pkg: string; domain: string; org: string; data: string[] };
+type Detail = { app: string; pkg: string; domain: string; org: string; data: string[]; fp?: string; payload?: string };
+
+/** Package of DioTa itself: its shielded browser ("Open with DioTa") reports what it blocked. */
+export const BROWSER_PKG = "app.diota";
 type Row = typeof intercepts.$inferSelect;
 
 export function decodeIntercept(userId: string, r: Row): Intercept | null {
@@ -44,6 +51,8 @@ export function decodeIntercept(userId: string, r: Row): Intercept | null {
       count: r.count,
       firstAt: r.firstAt.toISOString(),
       at: r.lastAt.toISOString(),
+      ...(d.fp ? { fp: d.fp } : {}),
+      ...(d.payload ? { payload: d.payload } : {}),
     };
   } catch {
     return null; // unreadable (e.g. the encryption key was rotated away)
@@ -118,7 +127,11 @@ export async function storeIntercepts(user: { id: string; language: string }, ev
   const parts = new Map<string, Part>();
 
   for (const e of events) {
-    const tracker = e.app ? null : matchTracker(e.domain);
+    const browser = e.pkg === BROWSER_PKG;
+    const host = e.domain.replace(/\.$/, "").slice(0, 253);
+    // A page in the DioTa browser trying to fingerprint the phone: recorded under the page's host.
+    const fp = browser && !e.app && e.fp ? e.fp.toLowerCase() : undefined;
+    const tracker = e.app ? null : fp ? { org: host, kind: "fingerprint" as Kind } : matchTracker(e.domain);
     if (!e.app && !tracker) continue; // only known tracker endpoints are recorded
     if (e.app && !blocked.has(e.pkg)) continue;
     const kind: Kind = tracker ? tracker.kind : "app";
@@ -126,15 +139,16 @@ export async function storeIntercepts(user: { id: string; language: string }, ev
     if (!isAppSlug(appSlug)) continue;
     const app = appName(appSlug, e.label);
     const org = tracker ? tracker.org : "";
-    const category = categorize(e.pkg, kind);
+    const category = browser && kind !== "location" ? "browsing" : categorize(e.pkg, kind);
     const data = [...KIND_DATA[kind]];
     const first = clampTime(Math.min(e.first, e.last), now);
     const last = clampTime(Math.max(e.first, e.last), now);
-    const domain = e.domain.replace(/\.$/, "").slice(0, 253);
+    const domain = host;
+    const payload = browser && e.payload ? e.payload.slice(0, 1000) : undefined;
 
     // The phone retries a batch when it doesn't hear back, so the same report can arrive twice:
     // it's stored (and counted in the vault) once.
-    const dedupeKey = hmac("intercept", `${uid}|${e.pkg}|${domain}|${e.trigger}|${e.app ? 1 : 0}|${e.first}|${e.last}|${e.count}`);
+    const dedupeKey = hmac("intercept", `${uid}|${e.pkg}|${domain}|${e.trigger}|${e.app ? 1 : 0}|${e.first}|${e.last}|${e.count}|${fp ?? ""}`);
     if (parts.has(dedupeKey)) continue;
     rows.push({
       dedupeKey,
@@ -146,7 +160,7 @@ export async function storeIntercepts(user: { id: string; language: string }, ev
       count: e.count,
       firstAt: new Date(first),
       lastAt: new Date(last),
-      detailEnc: encrypt(uid, JSON.stringify({ app, pkg: e.pkg, domain, org, data } satisfies Detail)),
+      detailEnc: encrypt(uid, JSON.stringify({ app, pkg: e.pkg, domain, org, data, ...(fp ? { fp } : {}), ...(payload ? { payload } : {}) } satisfies Detail)),
     });
 
     const group = hmac("vault-intercept", `${uid}|${appSlug}|${org || "app"}|${category}`);
