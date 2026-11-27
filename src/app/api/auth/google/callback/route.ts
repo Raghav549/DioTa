@@ -3,12 +3,15 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { users } from "@/db/schema";
 import { createSession } from "@/lib/auth";
+import { uniqueViolation } from "@/lib/api";
 import { hashPassword, randomToken, safeEqual } from "@/lib/crypto";
 import { audit, notify } from "@/lib/events";
 import { rateLimit, clientIp } from "@/lib/security";
 import { CONSENT_VERSION } from "@/lib/catalog";
 import { googleConfigured, googleRedirectUri, oauthCookieName } from "@/lib/oauth";
 import { isSecureOrigin, originOf } from "@/lib/origin";
+import { configProblems } from "@/lib/config";
+import { ensureSchema } from "@/db/migrate";
 
 // Always run per request; never pre-render or cache an OAuth callback.
 export const dynamic = "force-dynamic";
@@ -28,6 +31,12 @@ export async function GET(req: NextRequest) {
 
   try {
     if (!googleConfigured()) return fail();
+    const problems = configProblems();
+    if (problems.length) {
+      console.error(`[config] ${problems.join("; ")}`);
+      return fail();
+    }
+    await ensureSchema();
     if (!(await rateLimit(`google:${await clientIp()}`, 20, 600))) return fail();
 
     const sp = req.nextUrl.searchParams;
@@ -88,8 +97,9 @@ export async function GET(req: NextRequest) {
             consentVersion: CONSENT_VERSION,
           })
           .returning();
-      } catch {
-        return fail("google_exists"); // concurrent sign-up with the same email
+      } catch (e) {
+        if (uniqueViolation(e) !== null) return fail("google_exists"); // concurrent sign-up, same email
+        throw e;
       }
       await notify(u.id, "welcome", "security");
     }

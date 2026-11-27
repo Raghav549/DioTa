@@ -5,6 +5,8 @@ import { db } from "@/db";
 import { sessions, users, type User } from "@/db/schema";
 import { randomToken, sha256 } from "@/lib/crypto";
 import { ipFingerprint } from "@/lib/security";
+import { ensureSchema } from "@/db/migrate";
+import { databaseUrl } from "@/lib/config";
 
 const TTL_MS = 30 * 24 * 3600 * 1000; // sliding idle timeout
 const ABSOLUTE_MS = 90 * 24 * 3600 * 1000; // hard cap, regardless of activity
@@ -50,6 +52,8 @@ export async function createSession(userId: string) {
 export const getCurrentUser = cache(async (): Promise<SessionUser | null> => {
   const token = (await cookies()).get(sessionCookieName(await isHttps()))?.value;
   if (!token || token.length < 40 || token.length > 100) return null;
+  if (!databaseUrl()) return null; // not configured yet: behave as signed out instead of crashing pages
+  await ensureSchema();
   const [row] = await db
     .select({ s: sessions, u: users })
     .from(sessions)

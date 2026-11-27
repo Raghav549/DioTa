@@ -23,7 +23,7 @@ export const users = pgTable("users", {
   passwordHash: text("password_hash").notNull(),
   recoveryHash: text("recovery_hash"),
   language: text("language").notNull().default("en"),
-  theme: text("theme").notNull().default("system"),
+  theme: text("theme").notNull().default("light"),
   protectionEnabled: boolean("protection_enabled").notNull().default(true),
   monitoringEnabled: boolean("monitoring_enabled").notNull().default(true),
   notifPrefs: jsonb("notif_prefs")

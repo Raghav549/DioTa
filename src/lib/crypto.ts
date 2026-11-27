@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { promisify } from "node:util";
+import { ConfigError, parseEncryptionKey } from "@/lib/config";
 
 /* ---------- master key ---------- */
 let master: Buffer | null = null;
@@ -14,15 +15,13 @@ let master: Buffer | null = null;
  */
 function masterKey(): Buffer {
   if (master) return master;
-  const env = process.env.DATA_ENCRYPTION_KEY?.trim();
-  if (env) {
-    const b = Buffer.from(env, "base64");
-    if (b.length !== 32) throw new Error("DATA_ENCRYPTION_KEY must be 32 random bytes, base64 encoded");
-    master = b;
-    return b;
+  const parsed = parseEncryptionKey(process.env.DATA_ENCRYPTION_KEY);
+  if ("key" in parsed) {
+    master = parsed.key;
+    return master;
   }
-  if (process.env.NODE_ENV === "production" || process.env.VERCEL) {
-    throw new Error("DATA_ENCRYPTION_KEY is not set. Generate one with: openssl rand -base64 32");
+  if (process.env.DATA_ENCRYPTION_KEY?.trim() || process.env.NODE_ENV === "production" || process.env.VERCEL) {
+    throw new ConfigError([parsed.error]);
   }
   const dir = path.join(process.cwd(), ".data");
   const file = path.join(dir, "master.key");
