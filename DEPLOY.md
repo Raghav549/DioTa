@@ -11,7 +11,7 @@ Vercel → Project → **Settings → Environment Variables**. Tick **Production
 | Variable | Required | Value |
 |---|---|---|
 | `DATABASE_URL` | ✅ | Postgres connection string |
-| `DATA_ENCRYPTION_KEY` | ✅ | 32 random bytes: see "Creating the encryption key" below |
+| `DATA_ENCRYPTION_KEY` | recommended | 32 random bytes: see "Creating the encryption key" below. If it is missing, the app creates its own key in the database, so sign-up still works |
 | `APP_URL` | recommended | `https://your-domain.com` (no trailing slash) |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | optional | Google sign-in |
 | `DATABASE_SSL` | optional | leave empty. Set it to `no-verify` only if your provider's certificate fails verification (e.g. Supabase pooler) |
@@ -21,6 +21,12 @@ Vercel → Project → **Settings → Environment Variables**. Tick **Production
 > one, go to **Deployments → ⋯ → Redeploy**.
 
 ### Creating the encryption key
+**Only `DATABASE_URL` is strictly required.** Without `DATA_ENCRYPTION_KEY`, DioTa generates a random key
+on first start and stores it in the `app_secrets` table, so the app works right away. Setting your own key is
+still recommended: then a copy of the database alone is not enough to read encrypted vault items.
+You can add the key later at any time. Data saved before keeps working, and new data uses your key.
+`/api/health` shows which one is in use (`"encryption": "env-key"` or `"auto-key"`).
+
 You create this key yourself. It's not something you get from Vercel or from the database provider. Use any one of these methods:
 
 - **Browser (easiest):** open any web page, press `F12` (or right-click → Inspect), open the **Console** tab,
@@ -33,7 +39,7 @@ You create this key yourself. It's not something you get from Vercel or from the
 
 Paste only the value (for example `q3V9...Xk=`) into Vercel as `DATA_ENCRYPTION_KEY`. Don't include quotes or the `DATA_ENCRYPTION_KEY=` part.
 
-> ⚠️ **Save this key somewhere safe (e.g. a password manager) and never change it.** Vault items and
+> ⚠️ **Save this key somewhere safe (e.g. a password manager) and never change it once set.** Vault items and
 > payment details are encrypted with it. If you lose or change it, that data can't be recovered.
 
 ### Check your setup
@@ -56,7 +62,7 @@ Check the deployment: `https://your-domain.com/api/health` should return `{"ok":
 ## Troubleshooting
 | Symptom | Cause / fix |
 |---|---|
-| Sign-up shows "DioTa isn't fully set up on the server yet" | `DATA_ENCRYPTION_KEY` or `DATABASE_URL` is missing or invalid. Check `/api/health`, fix the variable, then redeploy |
+| Sign-up shows "DioTa isn't fully set up on the server yet" | `DATABASE_URL` is missing or the database can't be reached. Check `/api/health`, fix the variable, then redeploy |
 | Added a variable but nothing changed | You need to redeploy after changing variables |
 | "Cannot connect to the database" in `/api/health` | Wrong `DATABASE_URL`. For certificate errors, set `DATABASE_SSL=no-verify` |
 | Dashboard shows zeros after sign-up | Expected. DioTa only shows real data. Add apps under **Apps** and items in the **Vault** to start |

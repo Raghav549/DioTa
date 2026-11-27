@@ -55,3 +55,42 @@ describe("recovery keys", () => {
     expect(safeEqual("abc", "abcd")).toBe(false);
   });
 });
+
+describe("key ring (auto DB key + optional env key)", () => {
+  const U = "33333333-3333-3333-3333-333333333333";
+  it("data written with the auto key stays readable after DATA_ENCRYPTION_KEY is added", async () => {
+    const { registerDbKey } = await import("@/lib/crypto");
+    const crypto = await import("node:crypto");
+    registerDbKey(crypto.randomBytes(32));
+    const saved = process.env.DATA_ENCRYPTION_KEY;
+    delete process.env.DATA_ENCRYPTION_KEY;
+    const old = encrypt(U, "before env key");
+    expect(old.startsWith("v2.")).toBe(true);
+    process.env.DATA_ENCRYPTION_KEY = saved;
+    const fresh = encrypt(U, "after env key");
+    expect(fresh.startsWith("v1.")).toBe(true);
+    expect(decrypt(U, old)).toBe("before env key");
+    expect(decrypt(U, fresh)).toBe("after env key");
+  });
+  it("recovery-key hashes stay stable when the env key changes", () => {
+    const k = generateRecoveryKey();
+    const h1 = hashRecoveryKey(k);
+    const saved = process.env.DATA_ENCRYPTION_KEY;
+    process.env.DATA_ENCRYPTION_KEY = Buffer.alloc(32, 9).toString("base64");
+    expect(hashRecoveryKey(k)).toBe(h1);
+    process.env.DATA_ENCRYPTION_KEY = saved;
+  });
+  it("recovery keys hashed with only the env key (older deployments) still verify", async () => {
+    const { recoveryKeyCandidates } = await import("@/lib/crypto");
+    const nodeCrypto = await import("node:crypto");
+    const { envEncryptionKey } = await import("@/lib/config");
+    const k = generateRecoveryKey();
+    const legacy = nodeCrypto.createHmac("sha256", envEncryptionKey()!).update(`recovery:${k.replace(/-/g, "")}`).digest("hex");
+    const c = recoveryKeyCandidates(k.toLowerCase());
+    expect(c[0]).toBe(hashRecoveryKey(k));
+    expect(c).toContain(legacy);
+  });
+  it("recovery keys use the expected alphabet and shape", () => {
+    for (let i = 0; i < 50; i++) expect(generateRecoveryKey()).toMatch(/^([ABCDEFGHJKMNPQRSTVWXYZ2-9]{4}-){4}[ABCDEFGHJKMNPQRSTVWXYZ2-9]{4}$/);
+  });
+});

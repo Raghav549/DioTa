@@ -73,7 +73,7 @@ export default function AppsPage() {
 
   return (
     <div>
-      <PageHeader title={t("a.title")} right={<Button onClick={() => setAdding(true)} className="!px-4 !py-2.5"><Icon name="plus" size={18} />{t("a.add")}</Button>} />
+      <PageHeader title={t("a.title")} right={<Button onClick={() => setAdding(true)} className="max-w-[10rem] !px-4 !py-2.5"><Icon name="plus" size={18} className="shrink-0" /><span className="truncate">{t("a.add")}</span></Button>} />
       <div className="relative mb-4">
         <Icon name="search" size={19} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-muted" />
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("a.search")} aria-label={t("a.search")} className="input !pl-12" enterKeyHint="search" />
@@ -89,7 +89,7 @@ export default function AppsPage() {
         ]}
       />
       <div className="mb-4 mt-4 flex justify-end">
-        <select value={sort} onChange={(e) => setSort(e.target.value as Sort)} aria-label={t("a.s.name")} className="rounded-full border border-line bg-surface px-4 py-2 text-sm font-semibold text-fg outline-none">
+        <select value={sort} onChange={(e) => setSort(e.target.value as Sort)} aria-label={t("a.s.name")} className="max-w-full truncate rounded-full border border-line bg-surface px-4 py-2 text-sm font-semibold text-fg outline-none">
           <option value="name">{t("a.s.name")}</option>
           <option value="recent">{t("a.s.recent")}</option>
           <option value="review">{t("a.s.review")}</option>

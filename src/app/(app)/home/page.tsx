@@ -60,7 +60,7 @@ export default function Home() {
     return (
       <div className="space-y-4">
         <Skeleton className="h-64" />
-        <div className="grid grid-cols-2 gap-4"><Skeleton className="h-36" /><Skeleton className="h-36" /></div>
+        <div className="grid grid-cols-2 gap-3 sm:gap-4 [&>*]:min-w-0"><Skeleton className="h-36" /><Skeleton className="h-36" /></div>
         <Skeleton className="h-56" />
       </div>
     );
@@ -89,13 +89,13 @@ export default function Home() {
             </span>
             {t("h.status")}
           </span>
-          <h1 className="font-display mt-5 text-[2.6rem] font-semibold leading-none tracking-tight" style={{ color: tone }}>
+          <h1 className="font-display mt-5 text-[clamp(1.85rem,9vw,2.6rem)] font-semibold leading-tight tracking-tight [overflow-wrap:anywhere]" style={{ color: tone }}>
             {t(`h.st.${d.status}`)}
           </h1>
           <p className="mt-3 max-w-sm text-muted">{t(`h.st.${d.status}.d`)}</p>
           <div className="mt-6 grid grid-cols-4 gap-2.5">
             {actions.map((a) => (
-              <div key={a.label} className="flex flex-col items-center gap-2">
+              <div key={a.label} className="flex min-w-0 flex-col items-center gap-2">
                 <motion.a
                   whileTap={{ scale: 0.92 }}
                   href={a.href}
@@ -105,15 +105,15 @@ export default function Home() {
                 >
                   <Icon name={a.icon} size={22} />
                 </motion.a>
-                <span className="text-center text-[11px] font-semibold leading-tight text-muted">{a.label}</span>
+                <span className="w-full text-center text-[11px] font-semibold leading-tight text-muted [overflow-wrap:anywhere] [hyphens:auto]">{a.label}</span>
               </div>
             ))}
           </div>
         </div>
       </motion.section>
 
-      <div className="grid grid-cols-2 gap-4">
-        <Link href="/apps" className="glass relative overflow-hidden p-5" style={{ background: "linear-gradient(150deg, color-mix(in srgb, var(--primary) 38%, transparent), var(--surface))" }}>
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 [&>*]:min-w-0">
+        <Link href="/apps" className="glass relative overflow-hidden p-4 sm:p-5" style={{ background: "linear-gradient(150deg, color-mix(in srgb, var(--primary) 38%, transparent), var(--surface))" }}>
           <p className="text-sm font-semibold">{t("h.monitored")}</p>
           <p className="font-display mt-1 text-4xl font-semibold">{num(d.appsMonitored, locale)}</p>
           <div className="mt-4 flex -space-x-3">
@@ -122,17 +122,17 @@ export default function Home() {
             {logos.length === 0 && <span className="text-xs text-muted">{t("a.none")}</span>}
           </div>
         </Link>
-        <Link href="/wallet" className="glass p-5" style={{ background: "linear-gradient(150deg, color-mix(in srgb, var(--good) 26%, transparent), var(--surface))" }}>
+        <Link href="/wallet" className="glass p-4 sm:p-5" style={{ background: "linear-gradient(150deg, color-mix(in srgb, var(--good) 26%, transparent), var(--surface))" }}>
           <p className="text-sm font-semibold">{t("h.month")}</p>
           <p className="font-display mt-1 text-3xl font-semibold">{money(d.wallet.month, locale)}</p>
-          <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-surface-2">
+          <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-track">
             <motion.div className="h-full rounded-full bg-good" initial={{ width: 0 }} animate={{ width: d.wallet.lifetime ? `${Math.min(100, (d.wallet.month / d.wallet.lifetime) * 100)}%` : "0%" }} transition={{ duration: 1 }} />
           </div>
           <p className="mt-2 text-xs text-muted">{t("h.pending")}: {money(d.wallet.pending, locale)}</p>
         </Link>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 [&>*]:min-w-0">
         <Stat label={t("h.events")} value={num(d.eventsTotal, locale)} />
         <Stat label={t("h.blocked")} value={t("c.na")} small sub={t("h.blocked.na")} />
         <Stat label={t("h.stored")} value={bytes(d.dataBytes, locale)} sub={t("h.items", { n: num(d.dataItems, locale) })} />
@@ -149,17 +149,17 @@ export default function Home() {
       </Card>
 
       <Card>
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-bold">{t("h.tx")}</h2>
-          <Link href="/wallet" className="text-sm font-semibold text-primary">{t("c.view_all")}</Link>
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="min-w-0 text-lg font-bold">{t("h.tx")}</h2>
+          <Link href="/wallet" className="max-w-[45%] shrink-0 text-right text-sm font-semibold text-primary">{t("c.view_all")}</Link>
         </div>
         {d.recentTx.length ? <TxList items={d.recentTx} /> : <Empty icon="wallet" title={t("h.tx.empty")} body={t("h.tx.empty.b")} />}
       </Card>
 
       <Card>
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-bold">{t("h.apps")}</h2>
-          <Link href="/protection" className="text-sm font-semibold text-primary">{t("c.view_all")}</Link>
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="min-w-0 text-lg font-bold">{t("h.apps")}</h2>
+          <Link href="/protection" className="max-w-[45%] shrink-0 text-right text-sm font-semibold text-primary">{t("c.view_all")}</Link>
         </div>
         {d.recentEvents.length ? <EventList events={d.recentEvents} /> : <Empty icon="apps" title={t("h.apps.empty")} body={t("h.apps.empty.b")} action={<Link href="/apps?add=1" className="font-semibold text-primary">{t("q.add_app")}</Link>} />}
       </Card>
@@ -169,7 +169,7 @@ export default function Home() {
 
 function Stat({ label, value, sub, small }: { label: string; value: string; sub?: string; small?: boolean }) {
   return (
-    <div className="glass p-5">
+    <div className="glass p-4 sm:p-5">
       <p className="text-sm text-muted">{label}</p>
       <p className={`font-display mt-1 font-semibold ${small ? "text-xl" : "text-3xl"}`}>{value}</p>
       {sub && <p className="mt-1 text-xs text-muted">{sub}</p>}

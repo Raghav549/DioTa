@@ -8,6 +8,7 @@
   --bg-2: #efe7f6;
   --surface: rgba(255, 255, 255, 0.78);
   --surface-2: rgba(255, 255, 255, 0.95);
+  --track: rgba(70, 30, 100, 0.13);
   --solid: #ffffff;
   --line: rgba(70, 30, 100, 0.11);
   --fg: #1f1229;
@@ -39,6 +40,7 @@ html[data-theme="dark"] {
   --bg-2: #120c19;
   --surface: rgba(255, 255, 255, 0.055);
   --surface-2: rgba(255, 255, 255, 0.09);
+  --track: rgba(255, 255, 255, 0.16);
   --solid: #17101f;
   --line: rgba(255, 255, 255, 0.09);
   --fg: #f7f2fb;
@@ -71,6 +73,7 @@ html[data-theme="dark"] {
     --bg-2: #120c19;
     --surface: rgba(255, 255, 255, 0.055);
     --surface-2: rgba(255, 255, 255, 0.09);
+    --track: rgba(255, 255, 255, 0.16);
     --solid: #17101f;
     --line: rgba(255, 255, 255, 0.09);
     --fg: #f7f2fb;
@@ -102,6 +105,8 @@ html[data-theme="dark"] {
   --color-bg2: var(--bg-2);
   --color-surface: var(--surface);
   --color-surface2: var(--surface-2);
+  --color-surface-2: var(--surface-2);
+  --color-track: var(--track);
   --color-solid: var(--solid);
   --color-line: var(--line);
   --color-fg: var(--fg);
@@ -111,8 +116,8 @@ html[data-theme="dark"] {
   --color-good: var(--good);
   --color-warn: var(--warn);
   --color-bad: var(--bad);
-  --font-sans: "Manrope Variable", "Noto Sans Devanagari", "Noto Sans Bengali", "Noto Sans Gujarati", "Noto Sans Tamil", "Noto Sans Telugu", system-ui, sans-serif;
-  --font-display: "Fraunces Variable", "Noto Serif Devanagari", Georgia, serif;
+  --font-sans: "Manrope Variable", "Noto Sans Devanagari Variable", "Noto Sans Bengali Variable", "Noto Sans Gujarati Variable", "Noto Sans Tamil Variable", "Noto Sans Telugu Variable", "Noto Sans Devanagari", "Noto Sans Bengali", "Noto Sans Gujarati", "Noto Sans Tamil", "Noto Sans Telugu", system-ui, sans-serif;
+  --font-display: "Fraunces Variable", "Noto Sans Devanagari Variable", "Noto Sans Bengali Variable", "Noto Sans Gujarati Variable", "Noto Sans Tamil Variable", "Noto Sans Telugu Variable", "Noto Serif Devanagari", Georgia, serif;
 }
 
 html {
@@ -122,6 +127,8 @@ html {
 }
 body {
   min-height: 100dvh;
+  /* long words (e.g. Tamil/Telugu labels) wrap instead of pushing the layout off-screen */
+  overflow-wrap: break-word;
   color: var(--fg);
   font-family: var(--font-sans);
   background:

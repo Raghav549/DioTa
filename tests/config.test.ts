@@ -24,3 +24,15 @@ describe("DATA_ENCRYPTION_KEY parsing", () => {
     expect("error" in parseEncryptionKey(crypto.randomBytes(16).toString("base64"))).toBe(true);
   });
 });
+
+describe("lenient env key", () => {
+  it("accepts a long passphrase by hashing it, ignores short values", async () => {
+    const { envEncryptionKey } = await import("@/lib/config");
+    const saved = process.env.DATA_ENCRYPTION_KEY;
+    process.env.DATA_ENCRYPTION_KEY = "a long passphrase someone typed";
+    expect(envEncryptionKey()?.length).toBe(32);
+    process.env.DATA_ENCRYPTION_KEY = "short";
+    expect(envEncryptionKey()).toBeNull();
+    process.env.DATA_ENCRYPTION_KEY = saved;
+  });
+});

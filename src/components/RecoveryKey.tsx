@@ -15,7 +15,7 @@ export function RecoveryKey({ value, title, body, cta, onDone }: { value: string
       </div>
       <h1 className="font-display text-3xl font-semibold tracking-tight">{title}</h1>
       <p className="mb-6 mt-2 text-muted">{body}</p>
-      <div className="glass select-all p-5 text-center font-mono text-xl font-bold leading-relaxed tracking-wider" aria-label={t("f.recovery")}>
+      <div className="glass select-all whitespace-nowrap px-3 py-5 text-center font-mono text-[clamp(0.95rem,4.6vw,1.25rem)] font-bold leading-relaxed tracking-wide" aria-label={t("f.recovery")}>
         {value}
       </div>
       <Button

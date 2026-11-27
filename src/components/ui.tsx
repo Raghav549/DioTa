@@ -45,7 +45,7 @@ export function Card({ children, className = "" }: { children: ReactNode; classN
 
 export function Pill({ children, tone = "neutral", className = "" }: { children: ReactNode; tone?: "neutral" | "good" | "warn" | "bad" | "primary"; className?: string }) {
   const c = {
-    neutral: "bg-surface-2 text-muted",
+    neutral: "bg-track/60 text-muted",
     good: "bg-good/15 text-good",
     warn: "bg-warn/15 text-warn",
     bad: "bg-bad/15 text-bad",
@@ -82,7 +82,7 @@ export function Toggle({ checked, onChange, label, disabled }: { checked: boolea
         haptic(10);
         onChange(!checked);
       }}
-      className={`relative h-8 w-14 shrink-0 rounded-full border border-line transition-colors disabled:opacity-50 ${checked ? "btn-primary" : "bg-surface-2"}`}
+      className={`relative h-8 w-14 shrink-0 rounded-full border border-line transition-colors disabled:opacity-50 ${checked ? "btn-primary" : "bg-track"}`}
     >
       <motion.span
         layout
@@ -216,7 +216,7 @@ export function Sheet({ open, onClose, title, children }: { open: boolean; onClo
           >
             <div className="mb-4 flex items-center justify-between gap-3">
               <h2 className="text-xl font-bold">{title}</h2>
-              <button onClick={onClose} aria-label={t("c.close")} className="grid h-9 w-9 place-items-center rounded-full bg-surface-2">
+              <button onClick={onClose} aria-label={t("c.close")} className="grid h-9 w-9 place-items-center rounded-full bg-track/60">
                 <Icon name="x" size={18} />
               </button>
             </div>
@@ -283,15 +283,15 @@ export function PageHeader({ title, back, right }: { title: string; back?: strin
           <Icon name="back" size={20} />
         </a>
       )}
-      <h1 className="flex-1 truncate text-2xl font-bold tracking-tight">{title}</h1>
-      {right}
+      <h1 className="min-w-0 flex-1 text-2xl font-bold tracking-tight [overflow-wrap:anywhere]">{title}</h1>
+      {right && <div className="shrink-0">{right}</div>}
     </div>
   );
 }
 
 export function Tabs<T extends string>({ value, onChange, options }: { value: T; onChange: (v: T) => void; options: { id: T; label: string }[] }) {
   return (
-    <div className="no-scrollbar -mx-1 flex gap-2 overflow-x-auto px-1">
+    <div className="flex flex-wrap gap-2">
       {options.map((o) => (
         <button
           key={o.id}
@@ -299,7 +299,7 @@ export function Tabs<T extends string>({ value, onChange, options }: { value: T;
             haptic(6);
             onChange(o.id);
           }}
-          className={`shrink-0 rounded-full border px-4 py-2 text-sm font-semibold transition-colors ${
+          className={`shrink-0 whitespace-nowrap rounded-full border px-3.5 py-2 text-sm font-semibold transition-colors ${
             value === o.id ? "btn-primary border-transparent" : "border-line bg-surface text-muted"
           }`}
         >

@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { sessions, users } from "@/db/schema";
 import { ApiError, publicRoute, readBody } from "@/lib/api";
-import { generateRecoveryKey, hashPassword, hashRecoveryKey, safeEqual } from "@/lib/crypto";
+import { generateRecoveryKey, hashPassword, hashRecoveryKey, recoveryKeyCandidates, safeEqual } from "@/lib/crypto";
 import { audit, notify } from "@/lib/events";
 import { recoverSchema } from "@/lib/validation";
 
@@ -10,8 +10,8 @@ export const POST = publicRoute(
   async ({ req }) => {
     const b = await readBody(req, recoverSchema);
     const [u] = await db.select().from(users).where(eq(users.email, b.email)).limit(1);
-    const candidate = hashRecoveryKey(b.recoveryKey);
-    const ok = !!u && !!u.recoveryHash && safeEqual(candidate, u.recoveryHash);
+    const candidates = recoveryKeyCandidates(b.recoveryKey);
+    const ok = !!u && !!u.recoveryHash && candidates.some((c) => safeEqual(c, u.recoveryHash!));
     if (!ok || !u) {
       if (u) await audit(u.id, "recovery_failed");
       throw new ApiError("recovery_invalid", 400);

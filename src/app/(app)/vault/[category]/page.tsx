@@ -82,13 +82,13 @@ export default function CategoryPage() {
     <div className="space-y-4">
       <PageHeader title={name} back="/vault" />
       <div className="glass flex items-center gap-4 p-5" style={{ background: `linear-gradient(145deg, color-mix(in srgb, ${col.from} 32%, transparent), var(--surface) 75%)` }}>
-        <span className="grid h-16 w-16 place-items-center rounded-3xl text-white" style={{ background: `linear-gradient(145deg, ${col.from}, ${col.to})` }}><Icon name={CAT_ICON[data.category]} size={28} /></span>
-        <div className="flex-1 text-sm">
+        <span className="grid h-16 w-16 shrink-0 place-items-center rounded-3xl text-white" style={{ background: `linear-gradient(145deg, ${col.from}, ${col.to})` }}><Icon name={CAT_ICON[data.category]} size={28} /></span>
+        <div className="min-w-0 flex-1 text-sm">
+          <Pill tone="primary" className="mb-1.5"><Icon name="lock" size={12} />{t("v.encrypted")}</Pill>
           <p className="text-2xl font-bold">{t("v.count", { n: data.items.length })}</p>
           <p className="text-muted">{t("v.size")}: {bytes(total, locale)}</p>
           <p className="text-muted">{t("v.value")}: {t("v.value.na")}</p>
         </div>
-        <Pill tone="primary"><Icon name="lock" size={12} />{t("v.encrypted")}</Pill>
       </div>
 
       <Card>
@@ -104,9 +104,9 @@ export default function CategoryPage() {
         </div>
       </Card>
 
-      <div className="flex gap-3">
-        <Button full onClick={() => setAdd(true)} disabled={locked}><Icon name="plus" size={18} />{t("v.add")}</Button>
-        <Button variant="soft" onClick={exportJson} disabled={!data.items.length} aria-label={t("v.export")}><Icon name="download" size={18} />{t("v.export")}</Button>
+      <div className="grid grid-cols-[3fr_2fr] gap-3">
+        <Button full className="min-w-0 !px-4" onClick={() => setAdd(true)} disabled={locked}><Icon name="plus" size={18} />{t("v.add")}</Button>
+        <Button variant="soft" className="min-w-0 !px-3" onClick={exportJson} disabled={!data.items.length} aria-label={t("v.export")}><Icon name="download" size={18} />{t("v.export")}</Button>
       </div>
       {locked && <p className="px-2 text-sm text-warn">{t("err.vault_disabled")}</p>}
 
