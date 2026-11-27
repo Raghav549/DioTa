@@ -1,5 +1,6 @@
 "use client";
 import { useState, type ComponentType } from "react";
+import Link from "next/link";
 import { Icon } from "@/components/Icon";
 import { LanguagePicker } from "@/components/LanguagePicker";
 import { PaymentMethods, type Method } from "@/components/PaymentMethods";
@@ -176,8 +177,8 @@ function PrivacySection() {
         <div className="flex items-center justify-between gap-4"><div><p className="font-bold">{t("p.monitor")}</p><p className="text-sm text-muted">{t("p.monitor.d")}</p></div><Toggle checked={u.monitoringEnabled} onChange={(v) => patch({ monitoringEnabled: v })} label={t("p.monitor")} /></div>
       </Card>
       <Card className="!p-2">
-        <a href="/vault" className="flex items-center gap-3 rounded-3xl p-3.5 font-semibold hover:bg-surface-2"><Icon name="vault" size={20} className="text-primary" /><span className="flex-1">{t("priv.consent")}</span><Icon name="chevron" size={18} className="text-muted" /></a>
-        <a href="/protection" className="flex items-center gap-3 rounded-3xl p-3.5 font-semibold hover:bg-surface-2"><Icon name="shield" size={20} className="text-primary" /><span className="flex-1">{t("p.title")}</span><Icon name="chevron" size={18} className="text-muted" /></a>
+        <Link href="/vault" className="flex items-center gap-3 rounded-3xl p-3.5 font-semibold hover:bg-surface-2"><Icon name="vault" size={20} className="text-primary" /><span className="flex-1">{t("priv.consent")}</span><Icon name="chevron" size={18} className="text-muted" /></Link>
+        <Link href="/protection" className="flex items-center gap-3 rounded-3xl p-3.5 font-semibold hover:bg-surface-2"><Icon name="shield" size={20} className="text-primary" /><span className="flex-1">{t("p.title")}</span><Icon name="chevron" size={18} className="text-muted" /></Link>
       </Card>
     </>
   );

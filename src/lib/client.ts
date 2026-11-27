@@ -46,8 +46,22 @@ export function useApi<T>(url: string | null) {
     }
   }, [url]);
   useEffect(() => {
-    void load();
-  }, [load]);
+    if (!url) return;
+    let alive = true; // ignore responses that arrive after the URL changed / unmount
+    api<T>(url)
+      .then(
+        (d) => {
+          if (!alive) return;
+          setData(d);
+          setError(null);
+        },
+        (e) => alive && setError(e as ApiErr),
+      )
+      .finally(() => alive && setLoading(false));
+    return () => {
+      alive = false;
+    };
+  }, [url]);
   return { data, error, loading, reload: load };
 }
 

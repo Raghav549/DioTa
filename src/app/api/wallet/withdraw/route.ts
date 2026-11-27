@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { paymentMethods, walletTransactions } from "@/db/schema";
 import { ApiError, authRoute, readBody } from "@/lib/api";
@@ -6,7 +6,6 @@ import { decrypt } from "@/lib/crypto";
 import { audit, notify, recordEvent } from "@/lib/events";
 import { getProvider } from "@/lib/payments";
 import { withdrawSchema } from "@/lib/validation";
-import { walletSummary } from "@/lib/wallet";
 
 export const POST = authRoute(
   async ({ req, user }) => {
@@ -20,13 +19,26 @@ export const POST = authRoute(
       .limit(1);
     if (!m || m.status !== "verified") throw new ApiError("no_verified_method", 400);
     const paise = Math.round(b.amount * 100);
-    const w = await walletSummary(user.id);
-    if (paise > w.available) throw new ApiError("no_balance", 400);
+    if (!Number.isSafeInteger(paise) || paise < 1) throw new ApiError("invalid_input", 400);
 
-    const [tx] = await db
-      .insert(walletTransactions)
-      .values({ userId: user.id, type: "withdrawal", amountPaise: paise, status: "pending", methodId: m.id })
-      .returning({ id: walletTransactions.id });
+    // Serialise withdrawals per user and check the balance inside the same transaction,
+    // so two concurrent requests can never both spend the same funds.
+    const tx = await db.transaction(async (t) => {
+      await t.execute(sql`select pg_advisory_xact_lock(hashtext(${"withdraw:" + user.id}))`);
+      const [bal] = await t
+        .select({
+          earned: sql<string>`coalesce(sum(case when ${walletTransactions.type} = 'reward' and ${walletTransactions.status} in ('verified','completed') then ${walletTransactions.amountPaise} else 0 end), 0)`,
+          spent: sql<string>`coalesce(sum(case when ${walletTransactions.type} = 'withdrawal' and ${walletTransactions.status} <> 'failed' then ${walletTransactions.amountPaise} else 0 end), 0)`,
+        })
+        .from(walletTransactions)
+        .where(eq(walletTransactions.userId, user.id));
+      if (paise > Number(bal.earned) - Number(bal.spent)) throw new ApiError("no_balance", 400);
+      const [row] = await t
+        .insert(walletTransactions)
+        .values({ userId: user.id, type: "withdrawal", amountPaise: paise, status: "pending", methodId: m.id })
+        .returning({ id: walletTransactions.id });
+      return row;
+    });
     try {
       const result = await provider.createPayout({
         amountPaise: paise,

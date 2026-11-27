@@ -6,11 +6,11 @@ import { Button, Field } from "@/components/ui";
 import { api } from "@/lib/client";
 import { isLang, THEMES, type Theme } from "@/lib/catalog";
 
-export function LoginForm({ google, googleError }: { google: boolean; googleError: boolean }) {
+export function LoginForm({ google, googleError }: { google: boolean; googleError: "err.generic" | "err.email_taken" | null }) {
   const { t, errText, setLang, setTheme } = useApp();
   const [id, setId] = useState("");
   const [pw, setPw] = useState("");
-  const [err, setErr] = useState<string | null>(googleError ? t("err.generic") : null);
+  const [err, setErr] = useState<string | null>(googleError ? t(googleError) : null);
   const [loading, setLoading] = useState(false);
 
   async function submit(e: FormEvent) {

@@ -106,14 +106,18 @@ export const vaultCategories = pgTable(
   (t) => [primaryKey({ columns: [t.userId, t.category] })],
 );
 
-export const consents = pgTable("consents", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  scope: text("scope").notNull(),
-  granted: boolean("granted").notNull(),
-  version: text("version").notNull(),
-  createdAt: ts("created_at").notNull().defaultNow(),
-});
+export const consents = pgTable(
+  "consents",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    scope: text("scope").notNull(),
+    granted: boolean("granted").notNull(),
+    version: text("version").notNull(),
+    createdAt: ts("created_at").notNull().defaultNow(),
+  },
+  (t) => [index("consents_user_idx").on(t.userId)],
+);
 
 export const auditLogs = pgTable(
   "audit_logs",
@@ -142,15 +146,19 @@ export const walletTransactions = pgTable(
   (t) => [index("tx_user_time").on(t.userId, t.createdAt)],
 );
 
-export const paymentMethods = pgTable("payment_methods", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  kind: text("kind").notNull(), // upi | bank
-  display: text("display").notNull(),
-  detailEnc: text("detail_enc").notNull(),
-  status: text("status").notNull().default("unverified"),
-  createdAt: ts("created_at").notNull().defaultNow(),
-});
+export const paymentMethods = pgTable(
+  "payment_methods",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    kind: text("kind").notNull(), // upi | bank
+    display: text("display").notNull(),
+    detailEnc: text("detail_enc").notNull(),
+    status: text("status").notNull().default("unverified"),
+    createdAt: ts("created_at").notNull().defaultNow(),
+  },
+  (t) => [index("payment_methods_user_idx").on(t.userId)],
+);
 
 export const notifications = pgTable(
   "notifications",
@@ -165,18 +173,26 @@ export const notifications = pgTable(
   (t) => [index("notif_user_time").on(t.userId, t.createdAt)],
 );
 
-export const supportRequests = pgTable("support_requests", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  subject: text("subject").notNull(),
-  message: text("message").notNull(),
-  createdAt: ts("created_at").notNull().defaultNow(),
-});
+export const supportRequests = pgTable(
+  "support_requests",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    subject: text("subject").notNull(),
+    message: text("message").notNull(),
+    createdAt: ts("created_at").notNull().defaultNow(),
+  },
+  (t) => [index("support_user_idx").on(t.userId)],
+);
 
-export const rateLimits = pgTable("rate_limits", {
-  key: text("key").primaryKey(),
-  count: integer("count").notNull().default(0),
-  resetAt: ts("reset_at").notNull(),
-});
+export const rateLimits = pgTable(
+  "rate_limits",
+  {
+    key: text("key").primaryKey(),
+    count: integer("count").notNull().default(0),
+    resetAt: ts("reset_at").notNull(),
+  },
+  (t) => [index("rate_limits_reset_idx").on(t.resetAt)],
+);
 
 export type User = typeof users.$inferSelect;

@@ -3,17 +3,26 @@ import fs from "node:fs";
 import path from "node:path";
 import { promisify } from "node:util";
 
-/* ---------- master key (env first, otherwise a private key file outside the DB) ---------- */
+/* ---------- master key ---------- */
 let master: Buffer | null = null;
 
+/**
+ * Production (and any serverless host) MUST provide DATA_ENCRYPTION_KEY.
+ * Serverless filesystems are read-only and per-instance, so a generated key file would
+ * differ between instances and make encrypted data unreadable. The file fallback exists
+ * only for local development.
+ */
 function masterKey(): Buffer {
   if (master) return master;
-  const env = process.env.DATA_ENCRYPTION_KEY;
+  const env = process.env.DATA_ENCRYPTION_KEY?.trim();
   if (env) {
     const b = Buffer.from(env, "base64");
-    if (b.length !== 32) throw new Error("DATA_ENCRYPTION_KEY must be 32 bytes, base64 encoded");
+    if (b.length !== 32) throw new Error("DATA_ENCRYPTION_KEY must be 32 random bytes, base64 encoded");
     master = b;
     return b;
+  }
+  if (process.env.NODE_ENV === "production" || process.env.VERCEL) {
+    throw new Error("DATA_ENCRYPTION_KEY is not set. Generate one with: openssl rand -base64 32");
   }
   const dir = path.join(process.cwd(), ".data");
   const file = path.join(dir, "master.key");
@@ -23,7 +32,9 @@ function masterKey(): Buffer {
   } catch {
     /* already exists */
   }
-  master = Buffer.from(fs.readFileSync(file, "utf8").trim(), "base64");
+  const key = Buffer.from(fs.readFileSync(file, "utf8").trim(), "base64");
+  if (key.length !== 32) throw new Error(".data/master.key is corrupt");
+  master = key;
   return master;
 }
 
@@ -89,15 +100,18 @@ export async function hashPassword(pw: string): Promise<string> {
 export async function verifyPassword(pw: string, stored: string): Promise<boolean> {
   const parts = stored.split("$");
   if (parts.length !== 6 || parts[0] !== "scrypt") return false;
+  const [n, r, p] = [Number(parts[1]), Number(parts[2]), Number(parts[3])];
+  // Refuse absurd cost parameters so a corrupted hash cannot exhaust CPU/memory.
+  if (!Number.isInteger(n) || !Number.isInteger(r) || !Number.isInteger(p) || n > 2 ** 17 || r > 16 || p > 4) return false;
   const salt = Buffer.from(parts[4], "base64");
   const expected = Buffer.from(parts[5], "base64");
-  const key = await scrypt(pw.normalize("NFKC"), salt, expected.length, {
-    N: Number(parts[1]),
-    r: Number(parts[2]),
-    p: Number(parts[3]),
-    maxmem: 128 * 1024 * 1024,
-  });
-  return crypto.timingSafeEqual(key, expected);
+  if (salt.length < 16 || expected.length < 32) return false;
+  try {
+    const key = await scrypt(pw.normalize("NFKC"), salt, expected.length, { N: n, r, p, maxmem: 256 * 1024 * 1024 });
+    return crypto.timingSafeEqual(key, expected);
+  } catch {
+    return false;
+  }
 }
 
 /** A throwaway hash so login takes the same time for unknown accounts. */

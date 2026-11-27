@@ -34,6 +34,12 @@ describe("passwords", () => {
   it("rejects malformed hashes", async () => {
     expect(await verifyPassword("x", "plain")).toBe(false);
   });
+  it("refuses hashes with abusive cost parameters (DoS guard)", async () => {
+    const salt = Buffer.alloc(16, 1).toString("base64");
+    const key = Buffer.alloc(64, 2).toString("base64");
+    expect(await verifyPassword("x", `scrypt$1073741824$8$1$${salt}$${key}`)).toBe(false);
+    expect(await verifyPassword("x", `scrypt$abc$8$1$${salt}$${key}`)).toBe(false);
+  });
 });
 
 describe("recovery keys", () => {

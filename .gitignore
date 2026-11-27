@@ -1,4 +1,22 @@
-.next
+# dependencies / build output
 node_modules
+.next
+out
+build
+coverage
+*.tsbuildinfo
+next-env.d.ts
+
+# local data & secrets (never commit)
 .data
 .env
+.env*.local
+.env.development
+.env.production
+*.pem
+*.key
+
+# platform
+.vercel
+.DS_Store
+npm-debug.log*

@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 import Link from "next/link";
 import { EventList, type Ev } from "@/components/Activity";
 import { Icon, type IconName } from "@/components/Icon";
@@ -9,13 +9,24 @@ import { api, num, useApi } from "@/lib/client";
 
 type Dash = { status: string; protectionEnabled: boolean; monitoringEnabled: boolean; appsMonitored: number; appsTotal: number; alerts: number; eventsTotal: number };
 
+const noopSubscribe = () => () => {};
+
+function Item({ icon, title, value, tone = "neutral" }: { icon: IconName; title: string; value: string; tone?: "neutral" | "good" | "warn" }) {
+  return (
+    <li className="flex items-center gap-3.5 py-3.5">
+      <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-primary/12 text-primary"><Icon name={icon} size={20} /></span>
+      <span className="flex-1 font-semibold">{title}</span>
+      <Pill tone={tone}>{value}</Pill>
+    </li>
+  );
+}
+
 export default function ProtectionPage() {
   const { t, locale, toast, errText } = useApp();
   const { data: d, reload } = useApi<Dash>("/api/dashboard");
   const { data: v } = useApi<{ categories: { mode: string }[] }>("/api/vault");
   const { data: ev } = useApi<{ events: Ev[] }>("/api/events");
-  const [secure, setSecure] = useState<boolean | null>(null);
-  useEffect(() => setSecure(window.isSecureContext), []);
+  const secure = useSyncExternalStore(noopSubscribe, () => window.isSecureContext, () => null);
 
   async function patch(body: Record<string, boolean>) {
     try {
@@ -27,14 +38,6 @@ export default function ProtectionPage() {
   }
   if (!d) return <div className="space-y-4"><Skeleton className="h-32" /><Skeleton className="h-64" /></div>;
   const shared = v?.categories.filter((c) => c.mode === "selected").length ?? 0;
-
-  const Item = ({ icon, title, value, tone = "neutral" }: { icon: IconName; title: string; value: string; tone?: "neutral" | "good" | "warn" }) => (
-    <li className="flex items-center gap-3.5 py-3.5">
-      <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-primary/12 text-primary"><Icon name={icon} size={20} /></span>
-      <span className="flex-1 font-semibold">{title}</span>
-      <Pill tone={tone}>{value}</Pill>
-    </li>
-  );
 
   return (
     <div className="space-y-4">
