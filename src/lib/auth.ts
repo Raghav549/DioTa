@@ -95,6 +95,7 @@ export function publicUser(u: User) {
     protectionEnabled: u.protectionEnabled,
     monitoringEnabled: u.monitoringEnabled,
     notifPrefs: u.notifPrefs,
+    avatar: u.avatarUpdatedAt ? `/api/me/avatar?v=${u.avatarUpdatedAt.getTime()}` : null,
     createdAt: u.createdAt.toISOString(),
   };
 }

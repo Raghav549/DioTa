@@ -1,12 +1,16 @@
 "use client";
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { Icon, type IconName } from "@/components/Icon";
-import { useT } from "@/components/Providers";
+import { useApp } from "@/components/Providers";
+import { Avatar, type AvatarUser } from "@/components/Avatar";
 import { Wordmark } from "@/components/Wordmark";
 import { useApi, haptic } from "@/lib/client";
+import { autoSync } from "@/lib/deviceSync";
+import { Phone, isNative } from "@/lib/native";
+import { ONBOARDED_KEY } from "@/lib/androidApp";
 
 const NAV: { href: string; key: string; icon: IconName }[] = [
   { href: "/home", key: "nav.home", icon: "home" },
@@ -17,11 +21,34 @@ const NAV: { href: string; key: string; icon: IconName }[] = [
 ];
 
 export function AppShell({ children }: { children: ReactNode; name: string }) {
-  const t = useT();
+  const { t } = useApp();
   const path = usePathname();
-  const { data } = useApi<{ unread: number }>("/api/notifications");
-  const unread = data?.unread ?? 0;
+  const { data: me, reload: reloadMe } = useApi<{ user: AvatarUser }>("/api/me");
+  useEffect(() => {
+    // The profile page fires this after the photo or name changes, so the header updates at once.
+    window.addEventListener("dt:me-changed", reloadMe);
+    return () => window.removeEventListener("dt:me-changed", reloadMe);
+  }, [reloadMe]);
   const active = NAV.find((n) => path === n.href || path.startsWith(n.href + "/"))?.href;
+
+  const router = useRouter();
+  // Android app, first launch after sign-in: show the phone access screen once.
+  useEffect(() => {
+    if (isNative() && path !== "/device" && !localStorage.getItem(ONBOARDED_KEY)) router.replace("/device");
+  }, [path, router]);
+
+  // Android app: read real data from the phone when the app opens and whenever it comes back.
+  useEffect(() => {
+    if (!isNative()) return;
+    const run = () =>
+      autoSync((alerts) => {
+        for (const a of alerts.slice(0, 3)) Phone.notify(t("nt.alert.t"), t("nt.native.t", { app: a.app, perm: t(`perm.${a.perm}`) })).catch(() => {});
+      });
+    run();
+    const onVis = () => document.visibilityState === "visible" && run();
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
+  }, [t]);
 
   return (
     <div className="mx-auto min-h-dvh w-full max-w-2xl px-4 pb-36 pt-[max(1rem,env(safe-area-inset-top))] sm:px-6">
@@ -29,9 +56,8 @@ export function AppShell({ children }: { children: ReactNode; name: string }) {
         <Link href="/home" aria-label="DioTa">
           <Wordmark className="text-[2rem]" />
         </Link>
-        <Link href="/notifications" aria-label={t("nt.title")} className="relative grid h-11 w-11 place-items-center rounded-full border border-line bg-surface">
-          <Icon name="bell" size={20} />
-          {unread > 0 && <span className="absolute right-2.5 top-2.5 h-2.5 w-2.5 rounded-full bg-primary2 ring-2 ring-[var(--bg)]" />}
+        <Link href="/profile" aria-label={t("nav.profile")} className="rounded-full shadow-sm transition-transform active:scale-95">
+          <Avatar user={me?.user} size={44} />
         </Link>
       </header>
       <main>{children}</main>

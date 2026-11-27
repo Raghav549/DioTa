@@ -4,7 +4,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Icon, type IconName } from "@/components/Icon";
 import { useT } from "@/components/Providers";
 import { haptic } from "@/lib/client";
-import { appName } from "@/lib/catalog";
+import { appName, isCatalogSlug, isPackageSlug } from "@/lib/catalog";
 
 /* ---------- Button ---------- */
 type BtnProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, "onDrag" | "onDragStart" | "onDragEnd" | "onAnimationStart"> & {
@@ -267,10 +267,25 @@ export function Confirm({
 }
 
 /* ---------- App logo (original brand artwork, stored locally) ---------- */
-export function AppLogo({ slug, size = 48, className = "" }: { slug: string; size?: number; className?: string }) {
+/**
+ * Real app logo: built-in brand logo for catalog apps, otherwise the app's own icon taken from the
+ * phone (`logo`), otherwise a letter tile.
+ */
+export function AppLogo({ slug, logo, name, size = 48, className = "" }: { slug: string; logo?: string | null; name?: string; size?: number; className?: string }) {
+  const [failed, setFailed] = useState(false);
+  const src = isCatalogSlug(slug) ? `/logos/${slug}.svg` : logo && !failed ? logo : isPackageSlug(slug) && !failed ? `/api/apps/${encodeURIComponent(slug)}/icon` : null;
+  const label = name ?? appName(slug);
+  if (!src) {
+    const hue = [...slug].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 360, 7);
+    return (
+      <span aria-label={label} role="img" className={`grid shrink-0 place-items-center rounded-[28%] font-bold text-white ${className}`} style={{ width: size, height: size, fontSize: size * 0.42, background: `hsl(${hue} 45% 42%)` }}>
+        {label.trim().charAt(0).toUpperCase() || "?"}
+      </span>
+    );
+  }
   return (
     // eslint-disable-next-line @next/next/no-img-element
-    <img src={`/logos/${slug}.svg`} alt={appName(slug)} width={size} height={size} loading="lazy" className={`shrink-0 rounded-[28%] ${className}`} style={{ width: size, height: size }} />
+    <img src={src} alt={label} width={size} height={size} loading="lazy" onError={() => setFailed(true)} className={`shrink-0 rounded-[28%] object-cover ${className}`} style={{ width: size, height: size }} />
   );
 }
 

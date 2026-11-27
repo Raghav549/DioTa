@@ -9,6 +9,7 @@ import { RecoveryKey } from "@/components/RecoveryKey";
 import { Button, Card, Confirm, Empty, Field, Sheet, Skeleton, TextArea, Toggle } from "@/components/ui";
 import { THEMES, type Theme } from "@/lib/catalog";
 import { api, dateFmt, rel, useApi } from "@/lib/client";
+import { exportMyData } from "@/lib/native";
 import { PHONE_RE, cleanPhone, passwordOk } from "@/lib/rules";
 
 type Me = { id: string; name: string; email: string; phone: string | null; protectionEnabled: boolean; monitoringEnabled: boolean; notifPrefs: { alerts: boolean; activity: boolean; rewards: boolean; security: boolean }; createdAt: string };
@@ -300,12 +301,22 @@ function SupportSection() {
 }
 
 function ExportSection() {
-  const { t, toast } = useApp();
+  const { t, toast, errText } = useApp();
+  const [busy, setBusy] = useState(false);
+  async function run() {
+    setBusy(true);
+    try {
+      const name = await exportMyData();
+      toast(t("ex.saved", { name }));
+    } catch (e) {
+      toast(e instanceof Error && e.message === "rate" ? t("err.rate") : errText(e), "err");
+    } finally {
+      setBusy(false);
+    }
+  }
   return (
     <Card>
-      <Empty icon="download" title={t("s.export")} body={t("ex.b")} action={
-        <a href="/api/me/export" download onClick={() => toast(t("ex.done"))} className="btn-primary inline-flex items-center gap-2 rounded-full px-6 py-3.5 font-semibold"><Icon name="download" size={18} />{t("ex.btn")}</a>
-      } />
+      <Empty icon="download" title={t("s.export")} body={t("ex.b")} action={<Button loading={busy} onClick={run}><Icon name="download" size={18} />{t("ex.btn")}</Button>} />
     </Card>
   );
 }

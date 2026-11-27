@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { monitoredApps, privacyEvents } from "@/db/schema";
 import { ApiError, authRoute, readBody } from "@/lib/api";
 import { SENSITIVE, appName, isAppSlug } from "@/lib/catalog";
+import { publicApp } from "@/lib/apps";
 import { audit, notify, recordEvent } from "@/lib/events";
 import { appPatchSchema } from "@/lib/validation";
 
@@ -26,16 +27,7 @@ export const GET = authRoute<{ slug: string }>(async ({ user, params }) => {
     .orderBy(desc(privacyEvents.createdAt))
     .limit(50);
   return {
-    app: {
-      slug: a.slug,
-      monitoring: a.monitoring,
-      permissions: a.permissions,
-      dataCategories: a.dataCategories,
-      allowUse: a.allowUse,
-      addedAt: a.addedAt.toISOString(),
-      lastObservedAt: a.lastObservedAt?.toISOString() ?? null,
-      needsReview: a.permissions.some((p) => SENSITIVE.includes(p)),
-    },
+    app: publicApp(a),
     events: events.map((e) => ({ id: e.id, type: e.type, params: e.params, createdAt: e.createdAt.toISOString() })),
   };
 });
@@ -43,10 +35,14 @@ export const GET = authRoute<{ slug: string }>(async ({ user, params }) => {
 export const PATCH = authRoute<{ slug: string }>(async ({ req, user, params }) => {
   const a = await load(user.id, params.slug);
   const b = await readBody(req, appPatchSchema);
-  const name = appName(a.slug);
+  // Permissions of apps synced from the phone are real readings; they can only change on the phone.
+  if (b.permissions && a.source === "device") throw new ApiError("invalid_input", 409);
+  const name = appName(a.slug, a.name);
 
   if (b.monitoring !== undefined && b.monitoring !== a.monitoring)
     await recordEvent(user.id, b.monitoring ? "monitoring_on" : "monitoring_off", { app: name }, a.slug);
+  if (b.blocked !== undefined && b.blocked !== a.blocked)
+    await recordEvent(user.id, b.blocked ? "blocked_on" : "blocked_off", { app: name }, a.slug);
   if (b.allowUse !== undefined && b.allowUse !== a.allowUse)
     await recordEvent(user.id, b.allowUse ? "use_on" : "use_off", { app: name }, a.slug);
   if (b.permissions) {
@@ -67,7 +63,7 @@ export const PATCH = authRoute<{ slug: string }>(async ({ req, user, params }) =
 export const DELETE = authRoute<{ slug: string }>(async ({ user, params }) => {
   const a = await load(user.id, params.slug);
   await db.delete(monitoredApps).where(and(eq(monitoredApps.id, a.id), eq(monitoredApps.userId, user.id)));
-  await recordEvent(user.id, "app_removed", { app: appName(a.slug) });
+  await recordEvent(user.id, "app_removed", { app: appName(a.slug, a.name) });
   await audit(user.id, "app_removed", { slug: a.slug });
   return { ok: true };
 });

@@ -4,6 +4,7 @@ import { Icon } from "@/components/Icon";
 import { useApp } from "@/components/Providers";
 import { Button, Field } from "@/components/ui";
 import { api } from "@/lib/client";
+import { useIsNative } from "@/lib/native";
 import { isLang, THEMES, type Theme } from "@/lib/catalog";
 
 export function LoginForm({ google, googleError }: { google: boolean; googleError: "err.generic" | "err.email_taken" | null }) {
@@ -12,6 +13,8 @@ export function LoginForm({ google, googleError }: { google: boolean; googleErro
   const [pw, setPw] = useState("");
   const [err, setErr] = useState<string | null>(googleError ? t(googleError) : null);
   const [loading, setLoading] = useState(false);
+  // Google does not allow its sign-in page inside an app WebView, so the Android app uses email/phone.
+  const inApp = useIsNative();
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -41,7 +44,7 @@ export function LoginForm({ google, googleError }: { google: boolean; googleErro
         <a href="/forgot" className="text-sm font-semibold text-primary">{t("li.forgot")}</a>
       </div>
       <Button type="submit" full loading={loading} className="mt-6">{t("li.btn")}</Button>
-      {google && (
+      {google && !inApp && (
         <>
           <div className="my-5 flex items-center gap-3 text-sm text-muted">
             <span className="h-px flex-1 bg-line" />{t("c.or")}<span className="h-px flex-1 bg-line" />

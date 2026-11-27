@@ -2,7 +2,11 @@ import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import {
+  auditLogs,
   consents,
+  sessions,
+  supportRequests,
+  userAvatars,
   monitoredApps,
   notifications,
   paymentMethods,
@@ -14,12 +18,13 @@ import {
 import { authRoute } from "@/lib/api";
 import { publicUser } from "@/lib/auth";
 import { decrypt } from "@/lib/crypto";
+import { appName } from "@/lib/catalog";
 import { audit, recordEvent } from "@/lib/events";
 
 export const GET = authRoute(
   async ({ user }) => {
     const uid = user.id;
-    const [apps, events, items, cats, cons, txs, methods, notifs] = await Promise.all([
+    const [apps, events, items, cats, cons, txs, methods, notifs, sess, audits, support, [avatar]] = await Promise.all([
       db.select().from(monitoredApps).where(eq(monitoredApps.userId, uid)),
       db.select().from(privacyEvents).where(eq(privacyEvents.userId, uid)),
       db.select().from(vaultItems).where(eq(vaultItems.userId, uid)),
@@ -28,13 +33,18 @@ export const GET = authRoute(
       db.select().from(walletTransactions).where(eq(walletTransactions.userId, uid)),
       db.select().from(paymentMethods).where(eq(paymentMethods.userId, uid)),
       db.select().from(notifications).where(eq(notifications.userId, uid)),
+      db.select().from(sessions).where(eq(sessions.userId, uid)),
+      db.select().from(auditLogs).where(eq(auditLogs.userId, uid)),
+      db.select().from(supportRequests).where(eq(supportRequests.userId, uid)),
+      db.select().from(userAvatars).where(eq(userAvatars.userId, uid)).limit(1),
     ]);
     await audit(uid, "data_export");
     await recordEvent(uid, "export");
     const body = {
       exportedAt: new Date().toISOString(),
       profile: publicUser(user),
-      apps: apps.map(({ userId, ...a }) => (void userId, a)),
+      profilePicture: avatar ? `data:${avatar.mime};base64,${avatar.data}` : null,
+      apps: apps.map(({ userId, icon, ...a }) => (void userId, { ...a, name: appName(a.slug, a.name), hasPhoneIcon: !!icon })),
       privacyEvents: events.map(({ userId, ...e }) => (void userId, e)),
       vault: items.map((i) => ({
         category: i.category,
@@ -46,12 +56,15 @@ export const GET = authRoute(
       consents: cons.map((c) => ({ scope: c.scope, granted: c.granted, version: c.version, at: c.createdAt })),
       transactions: txs.map((t) => ({ type: t.type, amountPaise: t.amountPaise, status: t.status, at: t.createdAt })),
       paymentMethods: methods.map((m) => ({ kind: m.kind, display: m.display, status: m.status })),
-      notifications: notifs.map((n) => ({ type: n.type, params: n.params, at: n.createdAt })),
+      notifications: notifs.map((n) => ({ type: n.type, params: n.params, read: n.read, at: n.createdAt })),
+      signedInDevices: sess.map((x) => ({ device: x.userAgent, signedInAt: x.createdAt, lastActive: x.lastSeenAt, expires: x.expiresAt })),
+      securityLog: audits.map((a) => ({ action: a.action, at: a.createdAt })),
+      supportRequests: support.map((r) => ({ subject: r.subject, message: r.message, at: r.createdAt })),
     };
     return new NextResponse(JSON.stringify(body, null, 2), {
       headers: {
         "Content-Type": "application/json",
-        "Content-Disposition": 'attachment; filename="dioTa-export.json"',
+        "Content-Disposition": `attachment; filename="dioTa-export-${new Date().toISOString().slice(0, 10)}.json"`,
         "Cache-Control": "no-store",
       },
     });

@@ -1,10 +1,12 @@
 import * as si from "simple-icons";
 import fs from "node:fs";
-const wanted = ["whatsapp","instagram","youtube","spotify","netflix","swiggy","zomato","uber","snapchat","amazon","phonepe","googlepay","gmail","googlemaps","pinterest","reddit","facebook","telegram"];
+// Every catalog slug in src/lib/catalog.ts gets a logo. Run: node scripts/make-logos.mjs
+const catalog = fs.readFileSync(new URL("../src/lib/catalog.ts", import.meta.url), "utf8");
+const wanted = [...catalog.matchAll(/slug: "([a-z0-9]+)"/g)].map((m) => m[1]);
+const bySlug = new Map(Object.values(si).filter((i) => i && i.slug).map((i) => [i.slug, i]));
 const out = [];
 for (const slug of wanted) {
-  const key = "si" + slug[0].toUpperCase() + slug.slice(1);
-  const icon = si[key];
+  const icon = bySlug.get(slug);
   if (!icon) { console.log("MISSING", slug); continue; }
   const hex = icon.hex;
   const r = parseInt(hex.slice(0,2),16), g = parseInt(hex.slice(2,4),16), b = parseInt(hex.slice(4,6),16);

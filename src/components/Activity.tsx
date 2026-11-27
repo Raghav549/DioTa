@@ -24,7 +24,7 @@ export function EventList({ events }: { events: Ev[] }) {
       {events.map((e) => (
         <li key={e.id} className="flex items-center gap-3.5 py-3.5">
           {e.appSlug ? (
-            <AppLogo slug={e.appSlug} size={42} />
+            <AppLogo slug={e.appSlug} name={e.params.app} size={42} />
           ) : (
             <span className="grid h-[42px] w-[42px] shrink-0 place-items-center rounded-full bg-primary/12 text-primary">
               <Icon name={iconFor(e.type)} size={19} />

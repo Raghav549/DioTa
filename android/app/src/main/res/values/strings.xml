@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">DioTa</string>
+    <string name="offline_title">Can\'t reach DioTa</string>
+    <string name="offline_body">Check your internet connection and try again.</string>
+    <string name="retry">Try again</string>
+    <string name="channel_alerts">Permission alerts</string>
+    <string name="channel_firewall">Firewall</string>
+    <string name="choose_photo">Choose a photo</string>
+    <string name="firewall_on">Firewall is on</string>
+</resources>
