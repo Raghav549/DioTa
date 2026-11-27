@@ -1,146 +1,203 @@
 "use client";
-import { memo, useEffect, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { dataList } from "@/components/Activity";
 import { useApp } from "@/components/Providers";
-import { api, rel } from "@/lib/client";
-import { Phone, useIsNative } from "@/lib/native";
+import { AppLogo } from "@/components/ui";
+import { useCaught, type Caught } from "@/lib/live";
+import { useIsNative } from "@/lib/native";
 
-export type Caught = {
-  id: string;
-  app: string;
-  appSlug: string;
-  domain: string;
-  org: string;
-  kind: string;
-  data: string[];
-  trigger: string;
-  count: number;
-  at: string;
-};
+export type { Caught };
 
-const POLL_MS = 4000;
-const SHOW_MS = 5200;
+/** One playback: ["ohh"] → app (logo + one line) → "Don't worry…" → "DioTa blocked it! Enjoy" 🎉 */
+type Scene = "ohh" | "app" | "worry" | "blocked";
+const DURATION: Record<Scene, number> = { ohh: 1100, app: 2600, worry: 1500, blocked: 2800 };
+/** The same app hitting the same tracker again within this window is the same story, not a new one. */
+const SAME_STORY_MS = 20_000;
+const EASE = [0.22, 1, 0.36, 1] as const;
+
+const keyOf = (c: Caught) => `${c.pkg || c.appSlug}|${c.domain}`;
+const msOf = (c: Caught) => Date.parse(c.at) || 0;
 
 /**
- * Home card headline: a cinematic, real-time stream of attempts DioTa's tracker shield blocked on
- * the user's phone. Only real events from /api/intercepts; nothing is invented. New attempts jump
- * to the front the moment they arrive; otherwise the latest ones play in turn.
+ * Home card headline: the "Activities" movie. Every real attempt DioTa's tracker shield blocks plays
+ * as a short motion-graphics scene with the app's own logo. Nothing is invented: it only plays
+ * events from the phone (pushed live) and the account's list.
  */
 export const InterceptStream = memo(function InterceptStream() {
-  const { t, locale } = useApp();
+  const { t } = useApp();
   const native = useIsNative();
-  const reduce = useReducedMotion();
-  const [items, setItems] = useState<Caught[] | null>(null);
-  const [idx, setIdx] = useState(0);
-  /** Newest attempt shown so far (undefined until the first answer). */
-  const topId = useRef<string | null | undefined>(undefined);
+  const reduce = !!useReducedMotion();
+  const items = useCaught();
+  const [story, setStory] = useState<{ e: Caught; scene: Scene; n: number } | null>(null);
+  const played = useRef<{ key: string; at: number } | null>(null);
+  const latest = items?.[0];
 
-  // Poll while the screen is visible. State only changes when something new arrives.
+  // Start the next story when the current one has finished (or right away if nothing is playing).
+  const idle = !story || story.scene === "blocked";
+  const [blockedDone, setBlockedDone] = useState(true);
   useEffect(() => {
-    let alive = true;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const tick = async () => {
-      if (document.visibilityState === "visible") {
-        try {
-          const r = await api<{ intercepts: Caught[] }>("/api/intercepts?limit=12");
-          if (!alive) return;
-          const first = r.intercepts[0]?.id ?? null;
-          if (first !== topId.current) {
-            const fresh = topId.current !== undefined;
-            topId.current = first;
-            setItems(r.intercepts);
-            if (fresh) setIdx(0); // a new attempt was just blocked: show it now
-          }
-        } catch {
-          if (alive && topId.current === undefined) {
-            topId.current = null;
-            setItems([]);
-          }
-        }
-      }
-      if (alive) timer = setTimeout(tick, POLL_MS);
-    };
-    tick();
-    const onVis = () => {
-      if (document.visibilityState !== "visible") return;
-      clearTimeout(timer);
-      if (native) Phone.flushIntercepts().catch(() => {});
-      tick();
-    };
-    document.addEventListener("visibilitychange", onVis);
-    return () => {
-      alive = false;
-      clearTimeout(timer);
-      document.removeEventListener("visibilitychange", onVis);
-    };
-  }, [native]);
+    if (!latest || !idle || !blockedDone) return;
+    const p = played.current;
+    const at = msOf(latest);
+    const isNew = !p || (keyOf(latest) !== p.key ? at > p.at : at > p.at + SAME_STORY_MS);
+    if (!isNew) return;
+    played.current = { key: keyOf(latest), at };
+    setBlockedDone(false);
+    setStory((s) => ({ e: latest, scene: s ? "ohh" : "app", n: (s?.n ?? 0) + 1 }));
+  }, [latest, idle, blockedDone]);
 
-  // Play the latest attempts one after another.
-  const count = items?.length ?? 0;
+  // Advance through the scenes.
   useEffect(() => {
-    if (count < 2) return;
-    const id = setInterval(() => setIdx((i) => (i + 1) % Math.min(count, 8)), SHOW_MS);
-    return () => clearInterval(id);
-  }, [count]);
-
-  if (items === null) return <div className="min-h-[7.5rem]" aria-hidden />;
-
-  if (!items.length)
-    return (
-      <div className="min-h-[7.5rem]">
-        <h1 className="font-display text-[clamp(1.6rem,7.4vw,2.2rem)] font-semibold leading-tight tracking-tight [overflow-wrap:anywhere]">{t("h.stream.empty")}</h1>
-        <p className="mt-3 max-w-sm text-muted">{native ? t("h.stream.empty.native") : t("h.stream.empty.web")}</p>
-      </div>
-    );
-
-  const e = items[Math.min(idx, items.length - 1)];
-  const line =
-    e.kind === "app"
-      ? t("h.stream.app", { app: e.app, trigger: t(`tg.${e.trigger}`) })
-      : t("h.stream.line", { app: e.app, data: dataList(t, locale, e.data), trigger: t(`tg.${e.trigger}`) });
-  const words = line.replace(/\s{2,}/g, " ").replace(/\s+…/, "…").split(" ");
-  const step = reduce ? 0 : 0.045;
+    if (!story) return;
+    const id = setTimeout(() => {
+      if (story.scene === "blocked") setBlockedDone(true);
+      else setStory({ ...story, scene: story.scene === "ohh" ? "app" : story.scene === "app" ? "worry" : "blocked" });
+    }, DURATION[story.scene]);
+    return () => clearTimeout(id);
+  }, [story]);
 
   return (
-    <div className="relative min-h-[7.5rem]" aria-live="polite" aria-atomic="true">
-      <AnimatePresence mode="wait" initial={false}>
-        <motion.div
-          key={e.id}
-          initial={reduce ? { opacity: 0 } : { opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={reduce ? { opacity: 0 } : { opacity: 0, y: -12 }}
-          transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
-        >
-          <h1 className="font-display text-[clamp(1.3rem,5.8vw,1.75rem)] font-semibold leading-snug tracking-tight [overflow-wrap:anywhere]">
-            {words.map((w, i) => (
-              <motion.span
-                key={i}
-                className="inline-block whitespace-pre"
-                initial={reduce ? false : { opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.05 + i * step, duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
-              >
-                {w}
-                {i < words.length - 1 ? " " : ""}
-              </motion.span>
-            ))}
-          </h1>
-          <motion.p
-            className="font-display mt-2 text-[clamp(1.15rem,5vw,1.45rem)] font-semibold italic leading-snug"
-            style={{ color: "var(--good)" }}
-            initial={reduce ? false : { opacity: 0, x: -10 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.15 + words.length * step, duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-          >
-            {t("h.stream.blocked")}
-          </motion.p>
-          <p className="mt-2 truncate text-xs text-muted">
-            {[e.org, e.domain].filter(Boolean).join(" · ")}
-            {e.count > 1 ? ` · ×${e.count}` : ""} · {rel(e.at, locale)}
-          </p>
-        </motion.div>
-      </AnimatePresence>
+    <div className="relative">
+      <div className="relative overflow-hidden rounded-3xl border border-line bg-surface-2">
+        <p className="absolute left-4 top-3 z-10 text-xs font-bold uppercase tracking-[0.14em] text-muted">{t("mv.title")}</p>
+        <div className="relative grid h-[11.5rem] place-items-center px-4 pb-3 pt-8 text-center" aria-live="polite" aria-atomic="true">
+          {items === null ? null : !story ? (
+            <div>
+              <p className="font-display text-lg font-semibold leading-snug">{t("h.stream.empty")}</p>
+              <p className="mt-1 text-sm text-muted">{native ? t("mv.empty.native") : t("mv.empty.web")}</p>
+            </div>
+          ) : (
+            <AnimatePresence mode="wait" initial={false}>
+              <SceneView key={`${story.n}-${story.scene}`} scene={story.scene} e={story.e} reduce={reduce} />
+            </AnimatePresence>
+          )}
+        </div>
+      </div>
     </div>
   );
 });
+
+function SceneView({ scene, e, reduce }: { scene: Scene; e: Caught; reduce: boolean }) {
+  const { t } = useApp();
+  const fade = { initial: { opacity: 0 }, animate: { opacity: 1 }, exit: { opacity: 0 }, transition: { duration: 0.2 } };
+
+  if (scene === "app") {
+    const line = e.kind === "app" || !e.data.length ? t("mv.online") : t("mv.tried", { data: t(`dk.${e.data[0]}`) });
+    return (
+      <motion.div className="flex flex-col items-center" exit={reduce ? { opacity: 0 } : { opacity: 0, y: -26, scale: 0.9 }} transition={{ duration: 0.3, ease: EASE }}>
+        <motion.div
+          initial={reduce ? { opacity: 0 } : { opacity: 0, y: 70, scale: 0.6 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={reduce ? { duration: 0.2 } : { type: "spring", stiffness: 260, damping: 20 }}
+          className="rounded-[28%] shadow-[0_12px_32px_-12px_rgba(0,0,0,0.45)]"
+        >
+          <AppLogo slug={e.appSlug} name={e.app} size={64} />
+        </motion.div>
+        <motion.p
+          className="mt-3 max-w-[16rem] truncate text-sm font-semibold text-muted"
+          initial={reduce ? { opacity: 0 } : { opacity: 0, y: 14 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: reduce ? 0 : 0.28, duration: 0.35, ease: EASE }}
+        >
+          {e.app}
+        </motion.p>
+        <motion.p
+          className="font-display mt-0.5 max-w-[17rem] text-lg font-semibold leading-snug [overflow-wrap:anywhere]"
+          initial={reduce ? { opacity: 0 } : { opacity: 0, y: 14 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: reduce ? 0 : 0.42, duration: 0.35, ease: EASE }}
+        >
+          {line}
+        </motion.p>
+      </motion.div>
+    );
+  }
+
+  if (scene === "ohh" || scene === "worry")
+    return (
+      <motion.p
+        className="font-display text-[clamp(1.5rem,7vw,2rem)] font-semibold tracking-tight"
+        {...(reduce
+          ? fade
+          : {
+              initial: { opacity: 0, scale: 0.7, filter: "blur(6px)" },
+              animate: { opacity: 1, scale: 1, filter: "blur(0px)" },
+              exit: { opacity: 0, scale: 1.15, filter: "blur(6px)" },
+              transition: { duration: 0.35, ease: EASE },
+            })}
+      >
+        {scene === "ohh" ? t("mv.ohh") : t("mv.worry")}
+      </motion.p>
+    );
+
+  return (
+    <motion.div className="relative flex flex-col items-center" {...fade}>
+      {!reduce && <Burst />}
+      <motion.span
+        aria-hidden
+        className="block"
+        initial={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.2, rotate: -30 }}
+        animate={{ opacity: 1, scale: 1, rotate: 0 }}
+        transition={reduce ? { duration: 0.2 } : { type: "spring", stiffness: 420, damping: 14 }}
+      >
+        <Popper />
+      </motion.span>
+      <motion.p
+        className="font-display mt-2 text-[clamp(1.35rem,6.2vw,1.8rem)] font-semibold leading-tight tracking-tight"
+        style={{ color: "var(--good)" }}
+        initial={reduce ? { opacity: 0 } : { opacity: 0, y: 16, scale: 0.92 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ delay: reduce ? 0 : 0.12, duration: 0.4, ease: EASE }}
+      >
+        {t("mv.blocked")}
+      </motion.p>
+    </motion.div>
+  );
+}
+
+/** Party popper, drawn (emoji fonts differ between phones). */
+function Popper() {
+  return (
+    <svg width="46" height="46" viewBox="0 0 48 48" aria-hidden>
+      <path d="M6 43 17 15l16 16Z" fill="#F5B700" />
+      <path d="M11.2 30 20.6 39.4M14.2 22.4 26 34.2" stroke="#FF5C8A" strokeWidth="3" strokeLinecap="round" />
+      <path d="M17 15 33 31" stroke="#E09A00" strokeWidth="2" strokeLinecap="round" />
+      <path d="M26 13c2-4 1-7-1-9M35 22c4-2 7-1 9 1" stroke="#7B61FF" strokeWidth="2.6" fill="none" strokeLinecap="round" />
+      <path d="M31 17c3-3 6-3 8-6" stroke="#00B3A4" strokeWidth="2.6" fill="none" strokeLinecap="round" />
+      <circle cx="37" cy="7" r="2.4" fill="#FF8A00" />
+      <circle cx="43" cy="15" r="2" fill="#FF5C8A" />
+      <circle cx="22" cy="6" r="1.8" fill="#2BB673" />
+      <circle cx="42" cy="30" r="1.8" fill="#7B61FF" />
+    </svg>
+  );
+}
+
+const COLORS = ["#F5B700", "#FF5C8A", "#00B3A4", "#7B61FF", "#FF8A00", "#2BB673"];
+
+/** Party-popper burst: confetti flying out of the centre (deterministic, so renders stay pure). */
+function Burst() {
+  const bits = useMemo(
+    () =>
+      Array.from({ length: 22 }, (_, i) => {
+        const r = (n: number) => ((Math.sin((i + 1) * 12.9898 * n) * 43758.5453) % 1 + 1) % 1;
+        const angle = (i / 22) * Math.PI * 2 + r(1) * 0.5;
+        const dist = 70 + r(2) * 70;
+        return { x: Math.cos(angle) * dist, y: Math.sin(angle) * dist * 0.7 - 10, rot: r(3) * 540 - 270, w: 5 + r(4) * 5, round: i % 3 === 0, color: COLORS[i % COLORS.length], delay: r(5) * 0.08 };
+      }),
+    [],
+  );
+  return (
+    <div aria-hidden className="pointer-events-none absolute left-1/2 top-1/2">
+      {bits.map((b, i) => (
+        <motion.span
+          key={i}
+          className="absolute block"
+          style={{ width: b.w, height: b.round ? b.w : b.w * 1.8, background: b.color, borderRadius: b.round ? 999 : 2 }}
+          initial={{ x: 0, y: 0, opacity: 1, rotate: 0, scale: 0.4 }}
+          animate={{ x: b.x, y: [0, b.y, b.y + 40], opacity: [1, 1, 0], rotate: b.rot, scale: 1 }}
+          transition={{ duration: 1.5, delay: b.delay, ease: "easeOut", times: [0, 0.55, 1] }}
+        />
+      ))}
+    </div>
+  );
+}

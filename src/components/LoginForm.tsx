@@ -1,5 +1,6 @@
 "use client";
 import { useState, type FormEvent } from "react";
+import Link from "next/link";
 import { Icon } from "@/components/Icon";
 import { useApp } from "@/components/Providers";
 import { Button, Field } from "@/components/ui";
@@ -41,7 +42,7 @@ export function LoginForm({ google, googleError }: { google: boolean; googleErro
         <Field label={t("f.password")} type="password" value={pw} onChange={(e) => setPw(e.target.value)} autoComplete="current-password" enterKeyHint="go" maxLength={128} error={err} />
       </div>
       <div className="mt-3 text-right">
-        <a href="/forgot" className="text-sm font-semibold text-primary">{t("li.forgot")}</a>
+        <Link href="/forgot" className="text-sm font-semibold text-primary">{t("li.forgot")}</Link>
       </div>
       <Button type="submit" full loading={loading} className="mt-6">{t("li.btn")}</Button>
       {google && !inApp && (
@@ -56,7 +57,7 @@ export function LoginForm({ google, googleError }: { google: boolean; googleErro
       )}
       <p className="mt-7 text-center text-sm text-muted">
         {t("li.new")}{" "}
-        <a href="/language" className="font-semibold text-primary">{t("li.create")}</a>
+        <Link href="/language" className="font-semibold text-primary">{t("li.create")}</Link>
       </p>
     </form>
   );

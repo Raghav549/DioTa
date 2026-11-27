@@ -4,9 +4,11 @@ import { users } from "@/db/schema";
 import { ApiError, authRoute, readBody } from "@/lib/api";
 import { publicUser } from "@/lib/auth";
 import { audit, recordEvent } from "@/lib/events";
+import { storageState } from "@/lib/storage";
 import { profileSchema } from "@/lib/validation";
 
-export const GET = authRoute(async ({ user }) => ({ user: publicUser(user) }));
+/** The signed-in user, plus their storage use and plan (the 20 MB / 50 MB alerts read this). */
+export const GET = authRoute(async ({ user }) => ({ user: publicUser(user), storage: await storageState(user) }));
 
 export const PATCH = authRoute(async ({ req, user }) => {
   const b = await readBody(req, profileSchema);

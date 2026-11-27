@@ -8,6 +8,7 @@ import { api, useApi, clearApiCache } from "@/lib/client";
 
 const GROUPS: { id: string; icon: IconName }[][] = [
   [
+    { id: "upgrade", icon: "up" },
     { id: "profile", icon: "user" },
     { id: "account", icon: "id" },
     { id: "language", icon: "globe" },

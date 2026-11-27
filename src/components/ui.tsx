@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useId, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode } from "react";
+import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
 import { Icon, type IconName } from "@/components/Icon";
 import { useT } from "@/components/Providers";
@@ -110,9 +111,9 @@ export function Row({ icon, title, sub, right, onClick, href }: { icon?: IconNam
   const cls = "flex w-full items-center gap-3.5 rounded-3xl p-3.5 transition-colors hover:bg-surface-2";
   if (href)
     return (
-      <a href={href} className={cls}>
+      <Link href={href} className={cls} onClick={() => haptic(6)}>
         {inner}
-      </a>
+      </Link>
     );
   if (onClick)
     return (
@@ -200,7 +201,8 @@ export function Sheet({ open, onClose, title, children }: { open: boolean; onClo
   return (
     <AnimatePresence>
       {open && (
-        <motion.div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+        // While it closes it no longer catches taps (an invisible layer must never block the tab bar).
+        <motion.div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, pointerEvents: "none" }}>
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
           <motion.div
             role="dialog"
@@ -292,9 +294,9 @@ export function PageHeader({ title, back, right }: { title: string; back?: strin
   return (
     <div className="mb-5 flex items-center gap-3">
       {back && (
-        <a href={back} aria-label={t("c.back")} className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-surface border border-line">
+        <Link href={back} aria-label={t("c.back")} className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-surface border border-line">
           <Icon name="back" size={20} />
-        </a>
+        </Link>
       )}
       <h1 className="min-w-0 flex-1 text-2xl font-bold tracking-tight [overflow-wrap:anywhere]">{title}</h1>
       {right && <div className="shrink-0">{right}</div>}

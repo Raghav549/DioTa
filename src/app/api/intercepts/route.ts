@@ -2,6 +2,7 @@ import { ApiError, authRoute, readBody } from "@/lib/api";
 import { isAppSlug } from "@/lib/catalog";
 import { listIntercepts, storeIntercepts } from "@/lib/intercepts";
 import { rateLimit } from "@/lib/security";
+import { storageState } from "@/lib/storage";
 import { interceptBatchSchema } from "@/lib/validation";
 
 /** Latest blocked attempts (home stream, app dossier). `?app=<slug>` filters to one app. */
@@ -17,5 +18,8 @@ export const POST = authRoute(async ({ req, user }) => {
   // Per account (not per IP: many phones share a carrier IP).
   if (!(await rateLimit(`intercepts:${user.id}`, 600, 3600))) throw new ApiError("rate", 429);
   const { events } = await readBody(req, interceptBatchSchema, 200_000);
-  return storeIntercepts(user, events);
+  // Storage full: nothing is stored and the phone stops recording until space is freed / upgraded.
+  if ((await storageState(user)).full) return { stored: 0, filed: 0, paused: true };
+  const r = await storeIntercepts(user, events);
+  return { ...r, paused: (await storageState(user)).full };
 });

@@ -1,10 +1,10 @@
 "use client";
-import { api } from "@/lib/client";
+import { api, whenIdle } from "@/lib/client";
 import { APPS, isCatalogSlug, isPackageSlug } from "@/lib/catalog";
 import { Phone, isNative, type PhoneApp } from "@/lib/native";
 
 type TrackedApp = { slug: string; packageName: string | null; logo: string | null };
-export type SyncResult = { added: number; updated: number; alerts: { app: string; perm: string }[] };
+export type SyncResult = { added: number; updated: number; alerts: { app: string; perm: string }[]; paused?: boolean };
 
 const catalogPkg = new Map<string, string>(APPS.map((a) => [a.slug, a.pkg]));
 const CHUNK = 25;
@@ -53,23 +53,33 @@ export async function syncPhone(track: PhoneApp[] = []): Promise<SyncResult> {
   });
   for (let i = 0; i < payload.length; i += CHUNK) {
     const part = payload.slice(i, i + CHUNK);
+    if (i) await whenIdle();
     const r = await api<SyncResult>("/api/device/sync", {
       body: { apps: part, track: part.filter((a) => trackSet.has(a.pkg)).map((a) => a.pkg) },
     });
     total.added += r.added;
     total.updated += r.updated;
     total.alerts.push(...r.alerts);
+    if (r.paused) {
+      total.paused = true; // storage full: tracking stays paused until space is freed / upgraded
+      break;
+    }
   }
   return total;
 }
 
 const KEY = "dt_last_sync";
-/** Background sync when the app opens or comes back to the foreground (at most once a minute). */
+/**
+ * Background sync when the app opens or comes back to the foreground (at most every 5 minutes). It
+ * waits until the screen is idle and the user is not tapping, so it never slows down navigation.
+ */
 export async function autoSync(onAlerts?: (a: SyncResult["alerts"]) => void) {
   if (!isNative()) return;
   const last = Number(sessionStorage.getItem(KEY) ?? 0);
-  if (Date.now() - last < 60_000) return;
+  if (Date.now() - last < 5 * 60_000) return;
   sessionStorage.setItem(KEY, String(Date.now()));
+  await new Promise((r) => setTimeout(r, 2500));
+  await whenIdle();
   try {
     const r = await syncPhone();
     if (r.alerts.length && onAlerts) onAlerts(r.alerts);

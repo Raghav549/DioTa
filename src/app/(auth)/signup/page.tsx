@@ -1,5 +1,6 @@
 "use client";
 import { useState, type FormEvent } from "react";
+import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
 import { Icon } from "@/components/Icon";
 import { useApp } from "@/components/Providers";
@@ -140,7 +141,7 @@ export default function Signup() {
       </Button>
       <p className="mt-5 text-center text-sm text-muted">
         {t("su.have")}{" "}
-        <a href="/login" className="font-semibold text-primary">{t("li.btn")}</a>
+        <Link href="/login" className="font-semibold text-primary">{t("li.btn")}</Link>
       </p>
     </form>
   );

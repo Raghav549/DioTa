@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="bg">#FFFFFF</color>
-    <color name="fg">#0D0D0F</color>
+    <!-- The website's --bg / --fg (src/app/globals.css), light and dark. -->
+    <color name="bg">#F8F4FB</color>
+    <color name="fg">#1F1229</color>
+    <color name="bg_dark">#0A070D</color>
+    <color name="fg_dark">#F7F2FB</color>
     <color name="icon_bg">#FFFFFF</color>
 </resources>

@@ -8,6 +8,7 @@ import android.app.PendingIntent;
 import android.content.ActivityNotFoundException;
 import android.content.ContentResolver;
 import android.content.ContentValues;
+import android.app.Activity;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
@@ -45,7 +46,19 @@ public class NativeBridge {
     private final MainActivity activity;
     private final WebView web;
     private final Handler main = new Handler(Looper.getMainLooper());
-    private final ExecutorService worker = Executors.newSingleThreadExecutor();
+    /**
+     * Phone reads (status, app lists, firewall state) run on their own small pool, and anything that
+     * can be slow (files, notifications) on another, so one slow call can never hold up the rest
+     * (or make a screen wait). Nothing here ever runs on the UI thread.
+     */
+    private final ExecutorService worker = Executors.newFixedThreadPool(3, r -> {
+        Thread t = new Thread(r, "dioTa-bridge");
+        t.setPriority(Thread.NORM_PRIORITY - 1);
+        return t;
+    });
+    private final ExecutorService slow = Executors.newSingleThreadExecutor(r -> new Thread(r, "dioTa-bridge-io"));
+    /** A UPI payment waiting for the UPI app's answer. */
+    private String upiPendingId;
     private volatile boolean pageTrusted = false;
 
     /** The one permission/settings flow in progress (Android shows one at a time). */
@@ -67,8 +80,13 @@ public class NativeBridge {
         pageTrusted = trusted;
     }
 
+    boolean isPageTrusted() {
+        return pageTrusted;
+    }
+
     void shutdown() {
         worker.shutdownNow();
+        slow.shutdownNow();
     }
 
     @JavascriptInterface
@@ -101,16 +119,34 @@ public class NativeBridge {
                 main.post(() -> setShield(id, args.optBoolean("on"), args.optBoolean("ask", true)));
                 break;
             case "flushIntercepts":
-                worker.execute(() -> resolveSafe(id, () -> new JSONObject().put("queued", InterceptStore.get(activity).flushNow())));
+                // Never waits for the network: the store sends on its own thread.
+                resolveSafe(id, () -> new JSONObject().put("queued", InterceptStore.get(activity).flushAsync()));
+                break;
+            case "setCapture":
+                worker.execute(() -> resolveSafe(id, () -> {
+                    InterceptStore.get(activity).setPaused(!args.optBoolean("on", true));
+                    return new JSONObject().put("capturing", !InterceptStore.get(activity).isPaused());
+                }));
+                break;
+            case "ready":
+                main.post(activity::onWebReady);
+                resolveSafe(id, () -> new JSONObject().put("ok", true));
+                break;
+            case "appearance":
+                main.post(() -> activity.setAppearance(args.optBoolean("dark")));
+                resolveSafe(id, () -> new JSONObject().put("ok", true));
+                break;
+            case "payUpi":
+                main.post(() -> payUpi(id, args.optString("url")));
                 break;
             case "openAppSettings":
                 main.post(() -> openAppSettings(id, args.optString("pkg")));
                 break;
             case "notify":
-                worker.execute(() -> resolveSafe(id, () -> notify(args.optString("title"), args.optString("body"))));
+                slow.execute(() -> resolveSafe(id, () -> notify(args.optString("title"), args.optString("body"))));
                 break;
             case "saveFile":
-                worker.execute(() -> resolveSafe(id, () -> saveFile(args.optString("name"), args.optString("mime"), args.optString("base64"))));
+                slow.execute(() -> resolveSafe(id, () -> saveFile(args.optString("name"), args.optString("mime"), args.optString("base64"))));
                 break;
             default:
                 reject(id, "unknown_method");
@@ -201,6 +237,7 @@ public class NativeBridge {
         o.put("firewallRunning", FirewallService.isRunning());
         o.put("shield", Firewall.shield(activity));
         o.put("shieldRunning", FirewallService.isShieldRunning());
+        o.put("capturing", !InterceptStore.get(activity).isPaused());
         o.put("sdk", Build.VERSION.SDK_INT);
         o.put("version", BuildConfig.VERSION_NAME);
         return o;
@@ -505,5 +542,72 @@ public class NativeBridge {
 
     static List<String> list(Set<String> s) {
         return new ArrayList<>(s);
+    }
+
+    // ---------- UPI payment (the Upgrade plan) ----------
+
+    /**
+     * Opens the phone's UPI apps for a payment the server prepared (upi://pay?...). The user picks an
+     * app and approves the payment there; the app's answer comes back in {@link #onUpiResult}.
+     */
+    private void payUpi(String id, String url) {
+        Uri u = url == null ? null : Uri.parse(url);
+        if (u == null || !"upi".equals(u.getScheme()) || !"pay".equals(u.getHost())
+                || u.getQueryParameter("pa") == null || u.getQueryParameter("am") == null || !"INR".equals(u.getQueryParameter("cu"))) {
+            reject(id, "bad_args");
+            return;
+        }
+        Intent pay = new Intent(Intent.ACTION_VIEW, u);
+        if (activity.getPackageManager().queryIntentActivities(pay, 0).isEmpty()) {
+            reject(id, "no_upi_app");
+            return;
+        }
+        if (upiPendingId != null) reject(upiPendingId, "cancelled");
+        upiPendingId = id;
+        try {
+            activity.startActivityForResult(Intent.createChooser(pay, activity.getString(R.string.pay_with)), MainActivity.REQ_UPI);
+        } catch (ActivityNotFoundException e) {
+            upiPendingId = null;
+            reject(id, "no_upi_app");
+        }
+    }
+
+    /** The UPI app's answer: "txnId=..&responseCode=..&Status=SUCCESS&txnRef=..&ApprovalRefNo=..". */
+    void onUpiResult(int resultCode, Intent data) {
+        final String id = upiPendingId;
+        if (id == null) return;
+        upiPendingId = null;
+        java.util.Map<String, String> r = new java.util.HashMap<>();
+        if (data != null) {
+            String response = data.getStringExtra("response");
+            if (response != null) {
+                for (String part : response.split("&")) {
+                    int eq = part.indexOf('=');
+                    if (eq <= 0) continue;
+                    try {
+                        r.put(part.substring(0, eq).trim().toLowerCase(java.util.Locale.ROOT), Uri.decode(part.substring(eq + 1)).trim());
+                    } catch (Exception ignored) {
+                    }
+                }
+            }
+            for (String k : new String[]{"Status", "txnId", "txnRef", "responseCode", "ApprovalRefNo"}) {
+                String v = data.getStringExtra(k);
+                if (v != null && !r.containsKey(k.toLowerCase(java.util.Locale.ROOT))) r.put(k.toLowerCase(java.util.Locale.ROOT), v.trim());
+            }
+        }
+        String status = r.get("status");
+        if (status == null || status.isEmpty()) status = resultCode == Activity.RESULT_OK && !r.isEmpty() ? "unknown" : "cancelled";
+        final String st = status.toLowerCase(java.util.Locale.ROOT);
+        resolveSafe(id, () -> new JSONObject()
+                .put("status", st)
+                .put("txnId", clip(r.get("txnid")))
+                .put("txnRef", clip(r.get("txnref")))
+                .put("approvalRef", clip(r.containsKey("approvalrefno") ? r.get("approvalrefno") : r.get("approvalref")))
+                .put("responseCode", clip(r.get("responsecode"))));
+    }
+
+    private static String clip(String v) {
+        if (v == null) return "";
+        return v.length() > 80 ? v.substring(0, 80) : v;
     }
 }

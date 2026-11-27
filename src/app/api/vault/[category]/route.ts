@@ -1,11 +1,12 @@
 import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
-import { consents, vaultCategories, vaultItems } from "@/db/schema";
+import { consents, intercepts, vaultCategories, vaultItems } from "@/db/schema";
 import { ApiError, authRoute, readBody } from "@/lib/api";
 import { CATEGORIES, CONSENT_VERSION, type Category } from "@/lib/catalog";
 import { decrypt, encrypt } from "@/lib/crypto";
 import { audit, recordEvent } from "@/lib/events";
+import { storageState } from "@/lib/storage";
 import { vaultItemSchema, vaultModeSchema } from "@/lib/validation";
 
 function cat(p: string): Category {
@@ -45,6 +46,7 @@ export const POST = authRoute<{ category: string }>(async ({ req, user, params }
   const c = cat(params.category);
   const b = await readBody(req, vaultItemSchema);
   if ((await modeOf(user.id, c)) === "disabled") throw new ApiError("vault_disabled", 403);
+  if ((await storageState(user)).full) throw new ApiError("storage_full", 403);
   await db.insert(vaultItems).values({
     userId: user.id,
     category: c,
@@ -82,6 +84,8 @@ export const DELETE = authRoute<{ category: string }>(async ({ req, user, params
     await db.delete(vaultItems).where(and(eq(vaultItems.id, item), eq(vaultItems.userId, user.id), eq(vaultItems.category, c)));
   } else {
     await db.delete(vaultItems).where(and(eq(vaultItems.userId, user.id), eq(vaultItems.category, c)));
+    // Clearing a category also frees the captured records that were filed into it.
+    await db.delete(intercepts).where(and(eq(intercepts.userId, user.id), eq(intercepts.category, c)));
     await recordEvent(user.id, "vault_delete", { cat: c });
   }
   await audit(user.id, "vault_delete", { category: c, single: !!item });
