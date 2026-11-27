@@ -3,7 +3,9 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { AnimatePresence, motion } from "framer-motion";
 import { dictionaries, localeOf, translate } from "@/i18n";
 import type { LangCode, Theme } from "@/lib/catalog";
+import { usePathname } from "next/navigation";
 import { api, ApiErr, setCookie } from "@/lib/client";
+import { Phone, isNative } from "@/lib/native";
 
 type Params = Record<string, string | number>;
 type Ctx = {
@@ -81,6 +83,23 @@ export function Providers({ lang: l0, theme: t0, children }: { lang: LangCode; t
     };
   }, []);
 
+  // Android app: status bar icons / launch colours follow the theme.
+  useEffect(() => {
+    if (!isNative()) return;
+    const dark = theme === "dark" || (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+    Phone.appearance(dark).catch(() => {});
+  }, [theme]);
+
+  // Android app: once the first screen has painted, the native launch splash may fade away.
+  const path = usePathname();
+  useEffect(() => {
+    if (!isNative() || path === "/") return;
+    let id = requestAnimationFrame(() => {
+      id = requestAnimationFrame(() => Phone.ready().catch(() => {}));
+    });
+    return () => cancelAnimationFrame(id);
+  }, [path]);
+
   const value = useMemo(
     () => ({ lang, locale: localeOf(lang), t, setLang, theme, setTheme, toast, errText }),
     [lang, t, setLang, theme, setTheme, toast, errText],
@@ -89,7 +108,7 @@ export function Providers({ lang: l0, theme: t0, children }: { lang: LangCode; t
   return (
     <AppCtx.Provider value={value}>
       {children}
-      <div className="pointer-events-none fixed inset-x-0 top-3 z-[100] flex flex-col items-center gap-2 px-4" aria-live="polite">
+      <div className="pointer-events-none fixed inset-x-0 top-[calc(0.75rem+var(--sat))] z-[100] flex flex-col items-center gap-2 px-4" aria-live="polite">
         <AnimatePresence>
           {toasts.map((x) => (
             <motion.div

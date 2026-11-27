@@ -6,6 +6,7 @@ import { LanguagePicker } from "@/components/LanguagePicker";
 import { PaymentMethods, type Method } from "@/components/PaymentMethods";
 import { useApp } from "@/components/Providers";
 import { RecoveryKey } from "@/components/RecoveryKey";
+import { UpgradeSection } from "@/components/Upgrade";
 import { Button, Card, Confirm, Empty, Field, Sheet, Skeleton, TextArea, Toggle } from "@/components/ui";
 import { THEMES, type Theme } from "@/lib/catalog";
 import { api, dateFmt, rel, useApi } from "@/lib/client";
@@ -349,6 +350,7 @@ function DeleteSection() {
 }
 
 export const SECTIONS: Record<string, ComponentType> = {
+  upgrade: UpgradeSection,
   profile: ProfileSection,
   account: AccountSection,
   language: LanguageSection,

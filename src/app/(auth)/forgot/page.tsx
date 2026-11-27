@@ -1,5 +1,6 @@
 "use client";
 import { useState, type FormEvent } from "react";
+import Link from "next/link";
 import { useApp } from "@/components/Providers";
 import { RecoveryKey } from "@/components/RecoveryKey";
 import { Button, Field } from "@/components/ui";
@@ -45,7 +46,7 @@ export default function Forgot() {
       </div>
       <Button type="submit" full loading={loading} className="mt-6">{t("fg.btn")}</Button>
       <p className="mt-6 text-center text-sm">
-        <a href="/login" className="font-semibold text-primary">{t("fg.back")}</a>
+        <Link href="/login" className="font-semibold text-primary">{t("fg.back")}</Link>
       </p>
     </form>
   );

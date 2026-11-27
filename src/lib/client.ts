@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 
 export class ApiErr extends Error {
   constructor(
@@ -37,10 +37,15 @@ export async function api<T = { ok: true }>(url: string, opts: { method?: string
 const apiCache = new Map<string, unknown>();
 export const clearApiCache = () => apiCache.clear();
 
+const noopSub = () => () => {};
 export function useApi<T>(url: string | null) {
-  const [data, setDataState] = useState<T | null>(() => (url && apiCache.has(url) ? (apiCache.get(url) as T) : null));
+  // While hydrating server HTML the cache is not used (the server had none, so the first render must
+  // match it); it is applied right after. Client-side screen changes show cached data at once.
+  const hydrating = useSyncExternalStore(noopSub, () => false, () => true);
+  const cached = !hydrating && !!url && apiCache.has(url);
+  const [data, setDataState] = useState<T | null>(() => (cached ? (apiCache.get(url!) as T) : null));
   const [error, setError] = useState<ApiErr | null>(null);
-  const [loading, setLoading] = useState(() => !(url && apiCache.has(url)));
+  const [loading, setLoading] = useState(() => !cached);
   const setData = useCallback(
     (d: T) => {
       if (url) apiCache.set(url, d);
@@ -76,7 +81,9 @@ export function useApi<T>(url: string | null) {
       alive = false;
     };
   }, [url, setData]);
-  return { data, error, loading, reload: load };
+  // Right after hydration React renders again with the client snapshot, so cached data shows then.
+  const fromCache = data === null && cached ? (apiCache.get(url!) as T) : null;
+  return { data: data ?? fromCache, error, loading: loading && !fromCache, reload: load };
 }
 
 export function setCookie(name: string, value: string) {
@@ -120,4 +127,30 @@ export function rel(iso: string, locale: string) {
   if (abs < 86400) return f.format(Math.round(diff / 3600), "hour");
   if (abs < 86400 * 30) return f.format(Math.round(diff / 86400), "day");
   return dateFmt(iso, locale);
+}
+
+/* ---------- background work never competes with a tap ---------- */
+let lastInput = 0;
+if (typeof window !== "undefined") {
+  const mark = () => (lastInput = performance.now());
+  window.addEventListener("pointerdown", mark, { capture: true, passive: true });
+  window.addEventListener("keydown", mark, { capture: true, passive: true });
+}
+
+/**
+ * Resolves when the main thread is idle and the user has not touched the screen for a moment, so
+ * background work (phone sync, shield, polling) never delays a tap or a screen change.
+ */
+export function whenIdle(timeoutMs = 4000): Promise<void> {
+  return new Promise((resolve) => {
+    const start = performance.now();
+    const step = () => {
+      const quiet = performance.now() - lastInput > 450;
+      if (quiet || performance.now() - start > timeoutMs * 2) {
+        if ("requestIdleCallback" in window) window.requestIdleCallback(() => resolve(), { timeout: timeoutMs });
+        else setTimeout(resolve, 60);
+      } else setTimeout(step, 250);
+    };
+    step();
+  });
 }

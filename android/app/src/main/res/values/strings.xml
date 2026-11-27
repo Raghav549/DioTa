@@ -7,5 +7,6 @@
     <string name="channel_alerts">Permission alerts</string>
     <string name="channel_firewall">Firewall</string>
     <string name="choose_photo">Choose a photo</string>
+    <string name="pay_with">Pay with</string>
     <string name="firewall_on">Firewall is on</string>
 </resources>

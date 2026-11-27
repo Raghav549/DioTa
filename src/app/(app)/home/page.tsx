@@ -9,6 +9,7 @@ import { InterceptStream } from "@/components/InterceptStream";
 import { useApp } from "@/components/Providers";
 import { AppLogo, Card, Empty, Skeleton } from "@/components/ui";
 import { bytes, dateFmt, money, num, useApi } from "@/lib/client";
+import { useCaught } from "@/lib/live";
 import { exportMyData, useIsNative } from "@/lib/native";
 
 type Dash = {
@@ -35,6 +36,29 @@ export default function Home() {
   const { data: d, error, reload } = useApi<Dash>("/api/dashboard");
   const native = useIsNative();
   const [exporting, setExporting] = useState(false);
+  const caught = useCaught();
+
+  // "Recent app activity": attempts blocked since the dashboard was read show up the instant they
+  // happen (pushed by the phone / the live list), ahead of the rest.
+  const recent = useMemo(() => {
+    if (!d) return [];
+    const since = d.recentEvents.reduce((m, e) => Math.max(m, Date.parse(e.createdAt) || 0), 0);
+    const seen = new Set<string>();
+    const fresh: Ev[] = [];
+    for (const c of caught ?? []) {
+      if ((Date.parse(c.at) || 0) <= since || seen.has(`${c.pkg}|${c.domain}`)) continue;
+      seen.add(`${c.pkg}|${c.domain}`);
+      fresh.push({
+        id: c.live ? c.id : `i-${c.id}`,
+        type: c.kind === "app" ? "intercept_app" : "intercept",
+        params: { app: c.app, org: c.org, data: c.data.join(","), trigger: c.trigger, n: String(c.count) },
+        appSlug: c.appSlug,
+        createdAt: c.at,
+      });
+    }
+    const ids = new Set(fresh.map((e) => e.id));
+    return [...fresh, ...d.recentEvents.filter((e) => !ids.has(e.id))].slice(0, Math.max(6, d.recentEvents.length));
+  }, [d, caught]);
 
   async function doExport() {
     if (exporting) return;
@@ -187,7 +211,7 @@ export default function Home() {
           <h2 className="min-w-0 text-lg font-bold">{t("h.apps")}</h2>
           <Link href="/protection" className="max-w-[45%] shrink-0 text-right text-sm font-semibold text-primary">{t("c.view_all")}</Link>
         </div>
-        {d.recentEvents.length ? <EventList events={d.recentEvents} /> : <Empty icon="apps" title={t("h.apps.empty")} body={t("h.apps.empty.b")} action={<Link href="/apps?add=1" className="font-semibold text-primary">{t("q.add_app")}</Link>} />}
+        {recent.length ? <EventList events={recent} /> : <Empty icon="apps" title={t("h.apps.empty")} body={t("h.apps.empty.b")} action={<Link href="/apps?add=1" className="font-semibold text-primary">{t("q.add_app")}</Link>} />}
       </Card>
     </div>
   );

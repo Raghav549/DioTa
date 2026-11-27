@@ -172,6 +172,20 @@ body::before {
     -webkit-backdrop-filter: blur(12px);
   }
 }
+/* Safe areas. The Android app draws edge to edge and reports the status / navigation bar sizes
+   (WebViews do not always fill env()), so screens keep clear of them with no gap above. */
+:root {
+  --sat: env(safe-area-inset-top, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+}
+html.dt-app {
+  --sat: max(env(safe-area-inset-top, 0px), var(--dt-sat, 0px));
+  --sab: max(env(safe-area-inset-bottom, 0px), var(--dt-sab, 0px));
+}
+html.dt-app body > main {
+  padding-top: calc(1.25rem + var(--sat));
+  padding-bottom: calc(2rem + var(--sab));
+}
 .glass-solid {
   background: var(--solid);
   border: 1px solid var(--line);

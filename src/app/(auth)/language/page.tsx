@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useT } from "@/components/Providers";
 import { LanguagePicker } from "@/components/LanguagePicker";
@@ -17,9 +18,9 @@ export default function LanguagePage() {
       </Button>
       <p className="mt-5 text-center text-sm text-muted">
         {t("su.have")}{" "}
-        <a href="/login" className="font-semibold text-primary">
+        <Link href="/login" className="font-semibold text-primary">
           {t("li.btn")}
-        </a>
+        </Link>
       </p>
     </div>
   );

@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { cookies } from "next/headers";
 import { connection } from "next/server";
 import "@fontsource-variable/manrope";
@@ -34,8 +34,11 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
   const th = jar.get("dt_theme")?.value as Theme | undefined;
   const lang = isLang(l) ? l : "en";
   const theme: Theme = th && THEMES.includes(th) ? th : "light"; // light by default
+  // Android app: status / navigation bar sizes (dp) it reported, so the first paint already fits.
+  const ins = /^(\d{1,3}),(\d{1,3})$/.exec(jar.get("dt_insets")?.value ?? "");
+  const app = ins ? { className: "dt-app", style: { "--dt-sat": `${ins[1]}px`, "--dt-sab": `${ins[2]}px` } as CSSProperties } : {};
   return (
-    <html lang={lang} data-theme={theme} suppressHydrationWarning>
+    <html lang={lang} data-theme={theme} {...app} suppressHydrationWarning>
       <body className="antialiased">
         <Providers lang={lang} theme={theme}>
           {children}

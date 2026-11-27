@@ -23,6 +23,12 @@ const nextConfig: NextConfig = {
   serverExternalPackages: ["pg"],
   // Ship the SQL migrations with every server function so the schema can self-heal at runtime.
   outputFileTracingIncludes: { "/**": ["./drizzle/**/*"] },
+  experimental: {
+    // Tabs are client-rendered (their data comes from /api/* in the browser), so a screen that was
+    // opened or prefetched can be shown again straight from the in-memory router cache. Without this
+    // every tap waited for a server round trip before anything changed on screen.
+    staleTimes: { dynamic: 300, static: 300 },
+  },
   async headers() {
     return [
       { source: "/:path*", headers: securityHeaders },

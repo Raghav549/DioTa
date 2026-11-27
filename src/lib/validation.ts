@@ -129,3 +129,13 @@ export const interceptSchema = z.object({
 });
 export type InterceptIn = z.infer<typeof interceptSchema>;
 export const interceptBatchSchema = z.object({ events: z.array(interceptSchema).min(1).max(200) });
+
+/** The UPI app's answer to an Upgrade payment, relayed by the Android app. */
+export const upiConfirmSchema = z.object({
+  ref: z.string().regex(/^DT[0-9A-F]{20}$/),
+  status: z.string().trim().toLowerCase().max(20),
+  txnId: z.string().trim().max(80).optional().default(""),
+  txnRef: z.string().trim().max(80).optional().default(""),
+  approvalRef: z.string().trim().max(80).optional().default(""),
+  responseCode: z.string().trim().max(80).optional().default(""),
+});

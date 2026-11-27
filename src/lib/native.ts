@@ -24,6 +24,8 @@ export type NativeStatus = {
   /** Tracker shield (blocks tracker endpoints for every app on the phone) is on and running. */
   shield?: boolean;
   shieldRunning?: boolean;
+  /** False while recording is paused because the account's storage is full. */
+  capturing?: boolean;
   sdk: number;
   version: string;
 };
@@ -43,6 +45,11 @@ export type PhoneApp = {
   /** PNG data URL (only when icons were requested). */
   icon?: string;
 };
+
+export type UpiResult = { status: string; txnId: string; txnRef: string; approvalRef: string; responseCode: string };
+
+/** A blocked attempt as the phone reports it the moment it happens ("dt:intercepts" window event). */
+export type LiveAttempt = { pkg: string; label: string; domain: string; trigger: string; app: boolean; org?: string; kind?: string; at: number };
 
 export type Firewall = { packages: string[]; running: boolean; attempts: Record<string, number>; shield?: boolean };
 
@@ -104,8 +111,16 @@ export const Phone = {
    * `ask: false` never shows a dialog (used to follow the Protection switch silently).
    */
   setShield: (on: boolean, ask = true) => call<Firewall>("setShield", { on, ask }, 10 * 60_000),
-  /** Sends blocked attempts waiting on the phone to your account now (normally every few seconds). */
-  flushIntercepts: () => call<{ queued: number }>("flushIntercepts", {}, 30_000),
+  /** Sends blocked attempts waiting on the phone to your account now (never waits for the upload). */
+  flushIntercepts: () => call<{ queued: number }>("flushIntercepts", {}, 10_000),
+  /** Pauses (storage full) or resumes recording blocked attempts. Blocking itself never stops. */
+  setCapture: (on: boolean) => call<{ capturing: boolean }>("setCapture", { on }),
+  /** The first screen is on: the native launch splash may finish and fade away. */
+  ready: () => call<{ ok: true }>("ready", {}, 5_000),
+  /** Website theme, so the status bar icons and the next launch's colours match it. */
+  appearance: (dark: boolean) => call<{ ok: true }>("appearance", { dark }, 5_000),
+  /** Opens the phone's UPI apps for a prepared upi://pay link; resolves with the UPI app's answer. */
+  payUpi: (url: string) => call<UpiResult>("payUpi", { url }, 30 * 60_000),
   openAppSettings: (pkg: string) => call<{ ok: true }>("openAppSettings", { pkg }),
   notify: (title: string, body: string) => call<{ ok: true }>("notify", { title, body }),
   saveFile: (name: string, mime: string, base64: string) => call<{ name: string; location: string }>("saveFile", { name, mime, base64 }),

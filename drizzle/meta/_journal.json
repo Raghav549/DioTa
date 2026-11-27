@@ -36,6 +36,13 @@
       "when": 1795790804902,
       "tag": "0004_intercepts",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1795797197383,
+      "tag": "0005_upgrade_plan",
+      "breakpoints": true
     }
   ]
 }

@@ -35,6 +35,9 @@ export const users = pgTable("users", {
   consentVersion: text("consent_version"),
   /** Set when the user has a profile picture (the image lives in user_avatars). */
   avatarUpdatedAt: ts("avatar_updated_at"),
+  /** "pro" while a paid Upgrade is active (until planUntil); storage limits depend on it. */
+  plan: text("plan").notNull().default("free"),
+  planUntil: ts("plan_until"),
   createdAt: ts("created_at").notNull().defaultNow(),
 });
 
@@ -259,3 +262,27 @@ export const appSecrets = pgTable("app_secrets", {
 });
 
 export type User = typeof users.$inferSelect;
+
+/** Upgrade payments made by UPI from the Android app (one row per attempt). */
+export const upiPayments = pgTable(
+  "upi_payments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    /** Our reference for this payment attempt (the app confirms the UPI answer against it). */
+    ref: text("ref").notNull().unique(),
+    amountPaise: integer("amount_paise").notNull(),
+    /** pending -> paid | failed */
+    status: text("status").notNull().default("pending"),
+    txnId: text("txn_id"),
+    approvalRef: text("approval_ref"),
+    responseCode: text("response_code"),
+    createdAt: ts("created_at").notNull().defaultNow(),
+    paidAt: ts("paid_at"),
+  },
+  (t) => [
+    index("upi_user_time").on(t.userId, t.createdAt),
+    uniqueIndex("upi_txn_id").on(t.txnId),
+    uniqueIndex("upi_approval_ref").on(t.approvalRef),
+  ],
+);

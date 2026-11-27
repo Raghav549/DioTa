@@ -27,6 +27,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import javax.crypto.Cipher;
 import javax.crypto.KeyGenerator;
@@ -48,14 +49,29 @@ final class InterceptStore {
     private static final int MAX_QUEUED = 5000;
     private static final int CHUNK = 200;
     private static InterceptStore instance;
+    private static final String PREFS = "dioTa.capture";
+
+    /** Receives every blocked attempt the moment it happens (the open app screen). */
+    interface Listener {
+        void onAttempt(JSONObject attempt);
+    }
+
+    private static volatile Listener listener;
+
+    static void setListener(Listener l) {
+        listener = l;
+    }
 
     private final Context app;
     private final File file;
     private final ScheduledExecutorService exec;
     private final Map<String, Agg> pending = new ConcurrentHashMap<>();
     private volatile boolean started = false;
-    private long nextUploadAt = 0;
-    private long backoffMs = 0;
+    private volatile long nextUploadAt = 0;
+    private volatile long backoffMs = 0;
+    /** Account storage is full (the server said so): blocking goes on, nothing is recorded. */
+    private volatile boolean paused;
+    private final AtomicBoolean quickScheduled = new AtomicBoolean(false);
 
     private static final class Agg {
         final String pkg, label, domain, trigger;
@@ -80,6 +96,7 @@ final class InterceptStore {
     private InterceptStore(Context app) {
         this.app = app;
         this.file = new File(app.getNoBackupFilesDir(), "intercepts.queue");
+        this.paused = app.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean("paused", false);
         this.exec = Executors.newSingleThreadScheduledExecutor(r -> {
             Thread t = new Thread(() -> {
                 Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND);
@@ -102,7 +119,29 @@ final class InterceptStore {
 
     /** Records one blocked attempt. Cheap and thread-safe: called from the DNS worker threads. */
     void record(String pkg, String label, String domain, String trigger, boolean wholeApp) {
+        if (paused) return;
         long now = System.currentTimeMillis();
+        Listener l = listener;
+        if (l != null) {
+            try {
+                JSONObject o = new JSONObject();
+                o.put("pkg", pkg);
+                o.put("label", label);
+                o.put("domain", domain);
+                o.put("trigger", trigger);
+                o.put("app", wholeApp);
+                if (!wholeApp) {
+                    String[] t = Trackers.match(domain);
+                    if (t != null) {
+                        o.put("org", t[0]);
+                        o.put("kind", t[1]);
+                    }
+                }
+                o.put("at", now);
+                l.onAttempt(o);
+            } catch (Exception ignored) {
+            }
+        }
         String key = pkg + '|' + domain + '|' + trigger + '|' + wholeApp;
         pending.compute(key, (k, a) -> {
             if (a == null) a = new Agg(pkg, label, domain, trigger, wholeApp, now);
@@ -111,17 +150,40 @@ final class InterceptStore {
             return a;
         });
         start();
+        // Send it to the account within moments (not at the next 5-second tick).
+        if (quickScheduled.compareAndSet(false, true)) {
+            exec.schedule(() -> {
+                quickScheduled.set(false);
+                cycleSafe();
+            }, 1200, TimeUnit.MILLISECONDS);
+        }
     }
 
-    /** Sends everything now (the app was opened or a screen asked). Returns how many are still queued. */
-    int flushNow() throws Exception {
+    boolean isPaused() {
+        return paused;
+    }
+
+    /** Pauses recording (account storage full) or resumes it (space freed / storage upgraded). */
+    void setPaused(boolean p) {
+        if (paused == p) return;
+        paused = p;
+        app.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean("paused", p).apply();
+        if (p) {
+            pending.clear();
+            exec.execute(() -> {
+                //noinspection ResultOfMethodCallIgnored
+                file.delete();
+            });
+        }
+    }
+
+    /** Asks for an upload now, without waiting for it. Returns how many groups are waiting in memory. */
+    int flushAsync() {
         start();
         nextUploadAt = 0;
         backoffMs = 0;
-        return exec.submit(() -> {
-            cycle();
-            return readQueue().size();
-        }).get(25, TimeUnit.SECONDS);
+        exec.execute(this::cycleSafe);
+        return pending.size();
     }
 
     private void cycleSafe() {
@@ -148,6 +210,13 @@ final class InterceptStore {
                 continue;
             }
             int code = upload(chunk);
+            if (code == PAUSED) {
+                // The account's storage is full: stop recording (blocking continues) until it isn't.
+                setPaused(true);
+                left.clear();
+                failed = false;
+                break;
+            }
             if (code >= 200 && code < 300) continue;
             if (code == 400 || code == 413) continue; // rejected as invalid: drop it, never retry forever
             failed = true;
@@ -266,6 +335,9 @@ final class InterceptStore {
 
     // ---------- sending to the account ----------
 
+    /** upload() result when the server stored nothing because the account's storage is full. */
+    private static final int PAUSED = 299;
+
     /** POSTs a chunk with the app's own session cookie. Returns the HTTP status (or -1 on network errors). */
     private int upload(List<JSONObject> chunk) {
         String base = BuildConfig.SITE_URL;
@@ -297,7 +369,20 @@ final class InterceptStore {
             try (OutputStream out = con.getOutputStream()) {
                 out.write(body);
             }
-            return con.getResponseCode();
+            int code = con.getResponseCode();
+            if (code == 200) {
+                StringBuilder sb = new StringBuilder();
+                try (BufferedReader r = new BufferedReader(new InputStreamReader(con.getInputStream(), StandardCharsets.UTF_8))) {
+                    char[] buf = new char[512];
+                    int n;
+                    while ((n = r.read(buf)) > 0 && sb.length() < 4096) sb.append(buf, 0, n);
+                }
+                try {
+                    if (new JSONObject(sb.toString()).optBoolean("paused")) return PAUSED;
+                } catch (Exception ignored) {
+                }
+            }
+            return code;
         } catch (Exception e) {
             return -1;
         } finally {

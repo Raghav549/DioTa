@@ -5,6 +5,7 @@ import { authRoute, readBody } from "@/lib/api";
 import { mapAndroidPermissions } from "@/lib/android";
 import { SENSITIVE, catalogByPkg } from "@/lib/catalog";
 import { audit, notify, recordEvent } from "@/lib/events";
+import { storageState } from "@/lib/storage";
 import { deviceSyncSchema } from "@/lib/validation";
 
 /**
@@ -17,6 +18,8 @@ import { deviceSyncSchema } from "@/lib/validation";
 export const POST = authRoute(
   async ({ req, user }) => {
     const b = await readBody(req, deviceSyncSchema, 1_500_000);
+    // Storage full: tracking is paused until space is freed or storage is upgraded.
+    if ((await storageState(user)).full) return { added: 0, updated: 0, alerts: [], paused: true };
     const track = new Set(b.track ?? []);
     const rows = await db.select().from(monitoredApps).where(eq(monitoredApps.userId, user.id));
     const byPkg = new Map(rows.filter((r) => r.packageName).map((r) => [r.packageName!, r]));
