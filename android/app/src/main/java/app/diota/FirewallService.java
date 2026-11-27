@@ -41,7 +41,10 @@ import java.util.concurrent.TimeUnit;
  * system apps and browsers, in the foreground, the background or with the screen off). Each lookup
  * is attributed to the app that made it (getConnectionOwnerUid). Lookups of known tracker endpoints
  * (src/lib/data/trackers.json) are answered "does not exist", so the app cannot connect and nothing
- * is sent; every other lookup is forwarded unchanged to the network's own DNS server. Apps the user
+ * is sent; every other lookup is answered over encrypted DNS-over-HTTPS (DohResolver, cached), never
+ * by the network's own DNS servers, so the carrier can't see or log the lookups. Lookups over TCP are
+ * answered too (TcpDns), and DNS-over-TLS probes to the shield are refused so Android falls back to
+ * it at once. Apps the user
  * blocked get no answers at all. Each blocked attempt is recorded (app, endpoint, tracker, situation)
  * and sent, encrypted, to the user's DioTa account (InterceptStore). DioTa itself is excluded.
  *
@@ -72,8 +75,8 @@ public class FirewallService extends VpnService {
     private final Map<String, String> labels = new ConcurrentHashMap<>();
     private final Map<String, Long> pendingAttempts = new HashMap<>();
     private long attemptsFlushedAt = 0;
-    private volatile List<InetAddress> upstream = new ArrayList<>();
-    private volatile long upstreamAt = 0;
+    private volatile DohResolver doh;
+    private volatile TcpDns tcpDns;
 
     static boolean isRunning() {
         return running;
@@ -171,11 +174,46 @@ public class FirewallService extends VpnService {
             Trackers.load(this);
             if (foreground == null) foreground = new ForegroundTracker(this);
             uidToPkg.clear();
-            dnsPool = new ThreadPoolExecutor(2, 6, 30, TimeUnit.SECONDS, new ArrayBlockingQueue<>(512), r -> {
+            if (doh == null) doh = new DohResolver(new DohResolver.Net() {
+                @Override
+                public Network underlying() {
+                    return underlyingNetwork();
+                }
+
+                @Override
+                public boolean protect(java.net.DatagramSocket s) {
+                    return FirewallService.this.protect(s);
+                }
+            });
+            if (tcpDns == null) tcpDns = new TcpDns(new TcpDns.Host() {
+                @Override
+                public byte[] answer(byte[] query, byte[] client, int sport, byte[] server, int dport) {
+                    return answerFor(query, client, sport, server, dport, OsConstants.IPPROTO_TCP, false);
+                }
+
+                @Override
+                public void execute(Runnable r) {
+                    ThreadPoolExecutor pool = dnsPool;
+                    if (pool == null) return;
+                    try {
+                        pool.execute(r);
+                    } catch (RejectedExecutionException ignored) {
+                    }
+                }
+
+                @Override
+                public void write(byte[] packet) {
+                    writeRaw(packet);
+                }
+            });
+            // Encrypted lookups wait on the network, so several run at once (idle threads exit).
+            ThreadPoolExecutor pool = new ThreadPoolExecutor(10, 10, 30, TimeUnit.SECONDS, new ArrayBlockingQueue<>(512), r -> {
                 Thread t = new Thread(r, "dioTa-dns");
                 t.setPriority(Thread.NORM_PRIORITY - 1);
                 return t;
             }, new ThreadPoolExecutor.DiscardOldestPolicy());
+            pool.allowCoreThreadTimeOut(true);
+            dnsPool = pool;
             InterceptStore.get(this).start();
             reader = new Thread(() -> dnsLoop(fd), "dioTa-shield");
         } else {
@@ -198,6 +236,19 @@ public class FirewallService extends VpnService {
                 if (n < 0) break;
                 if (n == 0) continue;
                 final byte[] pkt = Arrays.copyOf(buf, n);
+                int ver = (pkt[0] >> 4) & 0xF;
+                int proto = ver == 4 && n >= 20 ? pkt[9] & 0xFF : ver == 6 && n >= 40 ? pkt[6] & 0xFF : -1;
+                if (proto == 6) {
+                    // DNS over TCP / DNS-over-TLS probes: handled in arrival order (cheap; lookups run in the pool).
+                    TcpDns t = tcpDns;
+                    if (t != null) {
+                        try {
+                            t.handle(pkt);
+                        } catch (Exception ignored) {
+                        }
+                    }
+                    continue;
+                }
                 // Always the current pool/tunnel: a lookup read during a reconfiguration is still answered.
                 ThreadPoolExecutor pool = dnsPool;
                 if (pool == null) continue;
@@ -248,27 +299,38 @@ public class FirewallService extends VpnService {
             byte[] client = Arrays.copyOfRange(p, srcOff, srcOff + addrLen);
             byte[] server = Arrays.copyOfRange(p, srcOff + addrLen, srcOff + 2 * addrLen);
 
-            int[] qEnd = new int[1];
-            String name = DnsPackets.questionName(query, qEnd);
-            String pkg = ownerPackage(client, sport, server, dport);
-            boolean appBlocked = pkg != null && blockedNow.contains(pkg);
-            String[] tracker = name == null ? null : Trackers.match(name);
-
-            if (appBlocked || tracker != null) {
-                writeToTun(version, client, server, sport, DnsPackets.nxdomain(query, qEnd[0]));
-                if (pkg != null && name != null) {
-                    long now = System.currentTimeMillis();
-                    String trigger = foreground.trigger(pkg, now);
-                    InterceptStore.get(this).record(pkg, label(pkg), name, trigger, tracker == null);
-                }
-                if (appBlocked) countAttempt(pkg);
-                return;
-            }
-            byte[] answer = forward(query);
+            byte[] answer = answerFor(query, client, sport, server, dport, OsConstants.IPPROTO_UDP, true);
             if (answer != null) writeToTun(version, client, server, sport, answer);
         } catch (Exception ignored) {
             // A malformed packet never takes the shield down.
         }
+    }
+
+    /**
+     * The answer to one lookup, over UDP or TCP: "does not exist" for tracker endpoints and blocked
+     * apps (and the attempt is recorded), otherwise the encrypted-DNS answer. Null if unanswerable.
+     */
+    private byte[] answerFor(byte[] query, byte[] client, int sport, byte[] server, int dport, int proto, boolean udp) {
+        int[] qEnd = new int[1];
+        String name = DnsPackets.questionName(query, qEnd);
+        String pkg = ownerPackage(proto, client, sport, server, dport);
+        boolean appBlocked = pkg != null && blockedNow.contains(pkg);
+        String[] tracker = name == null ? null : Trackers.match(name);
+
+        if (appBlocked || tracker != null) {
+            if (pkg != null && name != null) {
+                long now = System.currentTimeMillis();
+                String trigger = foreground.trigger(pkg, now);
+                InterceptStore.get(this).record(pkg, label(pkg), name, trigger, tracker == null);
+            }
+            if (appBlocked) countAttempt(pkg);
+            return DnsPackets.nxdomain(query, qEnd[0]);
+        }
+        DohResolver r = doh;
+        if (r == null || qEnd[0] <= 12) return null;
+        byte[] answer = r.resolve(query, qEnd[0]);
+        if (answer == null) return null;
+        return udp ? DohResolver.fitUdp(query, qEnd[0], answer) : answer;
     }
 
     private static int u16(byte[] a, int i) {
@@ -284,28 +346,30 @@ public class FirewallService extends VpnService {
         }
     }
 
-    /** Sends a lookup to the network's own DNS servers (outside the tunnel) and returns the answer. */
-    private byte[] forward(byte[] query) {
-        for (InetAddress server : upstreamServers()) {
-            try (DatagramSocket s = new DatagramSocket()) {
-                protect(s);
-                s.setSoTimeout(2500);
-                s.send(new DatagramPacket(query, query.length, server, 53));
-                byte[] buf = new byte[4096];
-                DatagramPacket r = new DatagramPacket(buf, buf.length);
-                s.receive(r);
-                return Arrays.copyOf(buf, r.getLength());
-            } catch (IOException ignored) {
-                upstreamAt = 0; // try the next one, and look the servers up again next time
+    private void writeRaw(byte[] pkt) {
+        FileOutputStream out = tunOut;
+        if (out == null) return;
+        try {
+            synchronized (tunWriteLock) {
+                out.write(pkt);
             }
+        } catch (IOException ignored) {
         }
-        return null;
     }
 
-    private List<InetAddress> upstreamServers() {
+    /** The phone's real network (Wi-Fi / mobile data) under the tunnel, for the encrypted lookups. */
+    private volatile Network underlying;
+    private volatile long underlyingAt = 0;
+
+    private Network underlyingNetwork() {
         long now = System.currentTimeMillis();
-        if (now - upstreamAt < 15_000 && !upstream.isEmpty()) return upstream;
-        List<InetAddress> out = new ArrayList<>();
+        if (now - underlyingAt < 5_000) return underlying;
+        underlying = findUnderlying();
+        underlyingAt = now;
+        return underlying;
+    }
+
+    private Network findUnderlying() {
         try {
             ConnectivityManager cm = getSystemService(ConnectivityManager.class);
             Network active = cm.getActiveNetwork();
@@ -315,33 +379,19 @@ public class FirewallService extends VpnService {
             for (Network n : nets) {
                 NetworkCapabilities c = cm.getNetworkCapabilities(n);
                 if (c == null || c.hasTransport(NetworkCapabilities.TRANSPORT_VPN) || !c.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)) continue;
-                LinkProperties lp = cm.getLinkProperties(n);
-                if (lp == null) continue;
-                for (InetAddress a : lp.getDnsServers()) {
-                    String h = a.getHostAddress();
-                    if (h != null && !h.equals(DNS4) && !h.startsWith("fd00:d10:7a") && !out.contains(a)) out.add(a);
-                }
+                return n;
             }
         } catch (Exception ignored) {
         }
-        if (out.isEmpty()) {
-            try {
-                out.add(InetAddress.getByAddress(new byte[]{1, 1, 1, 1}));
-                out.add(InetAddress.getByAddress(new byte[]{8, 8, 8, 8}));
-            } catch (Exception ignored) {
-            }
-        }
-        upstream = out;
-        upstreamAt = now;
-        return out;
+        return null;
     }
 
     /** The app that made this lookup (Android attributes DNS sockets to the requesting app). */
-    private String ownerPackage(byte[] client, int sport, byte[] server, int dport) {
+    private String ownerPackage(int proto, byte[] client, int sport, byte[] server, int dport) {
         int uid;
         try {
             ConnectivityManager cm = getSystemService(ConnectivityManager.class);
-            uid = cm.getConnectionOwnerUid(OsConstants.IPPROTO_UDP,
+            uid = cm.getConnectionOwnerUid(proto,
                     new InetSocketAddress(InetAddress.getByAddress(client), sport),
                     new InetSocketAddress(InetAddress.getByAddress(server), dport));
         } catch (Exception e) {

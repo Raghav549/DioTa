@@ -11,7 +11,7 @@ import { api, bytes, dateFmt, num, rel, useApi } from "@/lib/client";
 import { setAppBlocked } from "@/lib/blocking";
 import { packageOf, syncPhone } from "@/lib/deviceSync";
 import { Phone, isNative, useIsNative } from "@/lib/native";
-import type { AppRow } from "../page";
+import type { AppRow } from "@/components/tabs/AppsTab";
 
 type Detail = { app: Omit<AppRow, "events">; events: Ev[]; intercepts?: (Caught & { category: string; firstAt: string })[] };
 

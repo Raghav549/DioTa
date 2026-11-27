@@ -35,20 +35,40 @@ export async function api<T = { ok: true }>(url: string, opts: { method?: string
  * while fresh data loads in the background (stale-while-revalidate). Cleared on sign-out (full reload).
  */
 const apiCache = new Map<string, unknown>();
-export const clearApiCache = () => apiCache.clear();
+const cacheSubs = new Set<() => void>();
+function putCache(url: string, d: unknown) {
+  apiCache.set(url, d);
+  for (const fn of cacheSubs) fn();
+}
+export const clearApiCache = () => {
+  apiCache.clear();
+  for (const fn of cacheSubs) fn();
+};
+const subCache = (fn: () => void) => {
+  cacheSubs.add(fn);
+  return () => void cacheSubs.delete(fn);
+};
 
-const noopSub = () => () => {};
+/** Fetch screens' data ahead of time (in idle time), so a tab opened later has it at once. */
+export async function prefetchApi(urls: string[]) {
+  await Promise.all(urls.filter((u) => !apiCache.has(u)).map((u) => api(u, { noRedirect: true }).then((d) => putCache(u, d), () => {})));
+}
+
 export function useApi<T>(url: string | null) {
-  // While hydrating server HTML the cache is not used (the server had none, so the first render must
-  // match it); it is applied right after. Client-side screen changes show cached data at once.
-  const hydrating = useSyncExternalStore(noopSub, () => false, () => true);
-  const cached = !hydrating && !!url && apiCache.has(url);
-  const [data, setDataState] = useState<T | null>(() => (cached ? (apiCache.get(url!) as T) : null));
+  // The shared cache is read through a store: while hydrating server HTML it reads as empty (the
+  // server had none, so the first render matches it), and every screen using the same URL updates
+  // together when fresh data arrives, including tabs kept alive in the background.
+  const cachedVal = useSyncExternalStore(
+    subCache,
+    () => (url ? (apiCache.get(url) as T | undefined) : undefined),
+    () => undefined,
+  );
+  const [data, setDataState] = useState<T | null>(null);
   const [error, setError] = useState<ApiErr | null>(null);
-  const [loading, setLoading] = useState(() => !cached);
+  const [loading, setLoading] = useState(true);
   const setData = useCallback(
     (d: T) => {
-      if (url) apiCache.set(url, d);
+      if (url) putCache(url, d);
       setDataState(d);
     },
     [url],
@@ -81,9 +101,9 @@ export function useApi<T>(url: string | null) {
       alive = false;
     };
   }, [url, setData]);
-  // Right after hydration React renders again with the client snapshot, so cached data shows then.
-  const fromCache = data === null && cached ? (apiCache.get(url!) as T) : null;
-  return { data: data ?? fromCache, error, loading: loading && !fromCache, reload: load };
+  const fromCache = cachedVal ?? null;
+  const value = (fromCache ?? data) as T | null;
+  return { data: value, error, loading: loading && !fromCache, reload: load };
 }
 
 export function setCookie(name: string, value: string) {

@@ -22,7 +22,7 @@ const nextConfig: NextConfig = {
   // `pg` uses optional native bindings; keep it out of the server bundle.
   serverExternalPackages: ["pg"],
   // Ship the SQL migrations with every server function so the schema can self-heal at runtime.
-  outputFileTracingIncludes: { "/**": ["./drizzle/**/*"] },
+  outputFileTracingIncludes: { "/**": ["./drizzle/**/*", "./public/privacy-shield.js"] },
   experimental: {
     // Tabs are client-rendered (their data comes from /api/* in the browser), so a screen that was
     // opened or prefetched can be shown again straight from the in-memory router cache. Without this
