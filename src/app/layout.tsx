@@ -16,10 +16,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: [
-    { media: "(prefers-color-scheme: dark)", color: "#0a070d" },
-    { media: "(prefers-color-scheme: light)", color: "#f8f4fb" },
-  ],
+  themeColor: "#f8f4fb",
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
@@ -31,7 +28,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
   const l = jar.get("dt_lang")?.value;
   const th = jar.get("dt_theme")?.value as Theme | undefined;
   const lang = isLang(l) ? l : "en";
-  const theme: Theme = th && THEMES.includes(th) ? th : "system";
+  const theme: Theme = th && THEMES.includes(th) ? th : "light"; // light by default
   return (
     <html lang={lang} data-theme={theme} suppressHydrationWarning>
       <body className="antialiased">

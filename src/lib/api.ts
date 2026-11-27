@@ -3,6 +3,8 @@ import { ZodError, type ZodType } from "zod";
 import { getCurrentUser, type SessionUser } from "@/lib/auth";
 import { csrfOk } from "@/lib/csrf";
 import { clientIp, rateLimit } from "@/lib/security";
+import { ConfigError, configProblems } from "@/lib/config";
+import { ensureSchema } from "@/db/migrate";
 
 export class ApiError extends Error {
   constructor(
@@ -27,6 +29,9 @@ async function run<P>(
 ) {
   try {
     if (!["GET", "HEAD"].includes(req.method) && !csrfOk(req)) throw new ApiError("forbidden", 403);
+    const problems = configProblems();
+    if (problems.length) throw new ConfigError(problems);
+    await ensureSchema();
     if (opts.rate) {
       const ok = await rateLimit(`${opts.rate.name}:${await clientIp()}`, opts.rate.max, opts.rate.windowSec);
       if (!ok) throw new ApiError("rate", 429);
@@ -40,7 +45,12 @@ async function run<P>(
   } catch (e) {
     if (e instanceof ApiError) return NextResponse.json({ error: e.code }, { status: e.status, headers: NO_STORE });
     if (e instanceof ZodError) return NextResponse.json({ error: "invalid_input" }, { status: 400, headers: NO_STORE });
-    console.error("api error", e instanceof Error ? e.message : "unknown");
+    if (e instanceof ConfigError) {
+      // Visible in Vercel → Logs, so the operator knows exactly which variable to fix.
+      console.error(`[config] ${e.message}. Set it in Vercel → Settings → Environment Variables, then redeploy.`);
+      return NextResponse.json({ error: "server_config" }, { status: 503, headers: NO_STORE });
+    }
+    console.error("api error", req.method, req.nextUrl.pathname, e instanceof Error ? e.message : "unknown");
     return NextResponse.json({ error: "generic" }, { status: 500, headers: NO_STORE });
   }
 }
@@ -70,4 +80,16 @@ export async function readBody<T>(req: NextRequest, schema: ZodType<T>): Promise
     throw new ApiError("invalid_input");
   }
   return schema.parse(json);
+}
+
+/**
+ * If `e` is a Postgres unique-constraint violation (SQLSTATE 23505), returns the constraint name.
+ * Drizzle wraps driver errors, so the original pg error may be on `.cause`.
+ */
+export function uniqueViolation(e: unknown): string | null {
+  for (let cur: unknown = e, i = 0; cur && i < 4; cur = (cur as { cause?: unknown }).cause, i++) {
+    const pg = cur as { code?: string; constraint?: string };
+    if (pg.code === "23505") return pg.constraint ?? "";
+  }
+  return null;
 }

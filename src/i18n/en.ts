@@ -87,6 +87,7 @@ export const en = {
   "fg.back": "Back to sign in",
 
   "err.generic": "Something went wrong. Please try again.",
+  "err.server_config": "DioTa isn't fully set up on the server yet. Please try again in a few minutes.",
   "err.network": "Can't reach DioTa. Check your connection.",
   "err.invalid_credentials": "Incorrect email, phone or password.",
   "err.locked": "Too many attempts. Please wait 15 minutes.",

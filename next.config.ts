@@ -21,6 +21,8 @@ const nextConfig: NextConfig = {
   productionBrowserSourceMaps: false,
   // `pg` uses optional native bindings; keep it out of the server bundle.
   serverExternalPackages: ["pg"],
+  // Ship the SQL migrations with every server function so the schema can self-heal at runtime.
+  outputFileTracingIncludes: { "/**": ["./drizzle/**/*"] },
   async headers() {
     return [
       { source: "/:path*", headers: securityHeaders },
