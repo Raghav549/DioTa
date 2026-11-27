@@ -2,7 +2,6 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { motion } from "framer-motion";
 import { Icon } from "@/components/Icon";
 import { useApp } from "@/components/Providers";
 import { AppLogo, Button, Card, Empty, PageHeader, Pill, Sheet, Skeleton, Tabs, Toggle } from "@/components/ui";
@@ -117,7 +116,7 @@ export default function AppsPage() {
       ) : (
         <div className="space-y-3">
           {list.map((a, i) => (
-            <motion.div key={a.slug} layout initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(i, 8) * 0.04 }} className="glass flex items-center gap-3 p-4">
+            <div key={a.slug} className="rise glass flex items-center gap-3 p-4 [content-visibility:auto] [contain-intrinsic-size:auto_86px]" style={{ animationDelay: `${Math.min(i, 8) * 40}ms`, ["--rise" as string]: "12px" }}>
               <Link href={`/apps/${encodeURIComponent(a.slug)}`} className="flex min-w-0 flex-1 items-center gap-4">
                 <AppLogo slug={a.slug} logo={a.logo} name={a.name} size={54} />
                 <div className="min-w-0 flex-1">
@@ -133,7 +132,7 @@ export default function AppsPage() {
                 </div>
               </Link>
               <Toggle checked={a.monitoring} onChange={(v) => toggle(a.slug, v)} label={t("a.monitoring")} />
-            </motion.div>
+            </div>
           ))}
         </div>
       )}

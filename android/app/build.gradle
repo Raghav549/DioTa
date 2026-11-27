@@ -49,6 +49,13 @@ android {
         buildConfig true
     }
 
+    // The tracker list is shared with the website (src/lib/data/trackers.json): one source of truth.
+    sourceSets {
+        main {
+            assets.srcDirs += ["../../src/lib/data"]
+        }
+    }
+
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17

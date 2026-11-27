@@ -113,3 +113,19 @@ export const deviceSyncSchema = z.object({
 export const avatarSchema = z.object({
   dataUrl: z.string().max(400_000).regex(/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/),
 });
+
+/* ---------- Android tracker shield: blocked attempts ---------- */
+export const interceptSchema = z.object({
+  pkg: pkgSchema,
+  label: z.string().trim().min(1).max(80),
+  domain: z.string().trim().toLowerCase().max(253),
+  trigger: z.enum(["launch", "foreground", "background", "screen_off", "unknown"]),
+  /** True when the whole app is blocked by the user (any domain), false for a tracker endpoint. */
+  app: z.boolean().optional(),
+  count: z.number().int().min(1).max(100_000),
+  /** Epoch ms of the first and last attempt in this batch. */
+  first: z.number().int().min(0).max(4102444800000),
+  last: z.number().int().min(0).max(4102444800000),
+});
+export type InterceptIn = z.infer<typeof interceptSchema>;
+export const interceptBatchSchema = z.object({ events: z.array(interceptSchema).min(1).max(200) });

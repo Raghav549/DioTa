@@ -109,7 +109,7 @@ export default function DevicePage() {
           {STEPS.map((s, i) => {
             const on = s.id === "apps" ? st.apps : st[s.id];
             return (
-              <motion.div key={s.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }} className="glass flex items-center gap-4 p-4">
+              <div key={s.id} className="rise glass flex items-center gap-4 p-4" style={{ animationDelay: `${i * 40}ms`, ["--rise" as string]: "10px" }}>
                 <span className={`grid h-12 w-12 shrink-0 place-items-center rounded-2xl ${on ? "bg-good/15 text-good" : "bg-track text-fg"}`}>
                   <Icon name={on ? "check" : s.icon} size={22} stroke={on ? 2.6 : 1.8} />
                 </span>
@@ -124,7 +124,7 @@ export default function DevicePage() {
                     {t("dv.allow")}
                   </Button>
                 ) : null}
-              </motion.div>
+              </div>
             );
           })}
         </div>

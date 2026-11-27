@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import { EventList, TxList, type Ev, type Tx } from "@/components/Activity";
 import { Chart } from "@/components/Chart";
 import { Icon, type IconName } from "@/components/Icon";
+import { InterceptStream } from "@/components/InterceptStream";
 import { useApp } from "@/components/Providers";
 import { AppLogo, Card, Empty, Skeleton } from "@/components/ui";
 import { bytes, dateFmt, money, num, useApi } from "@/lib/client";
@@ -28,8 +29,6 @@ type Dash = {
   blockedAttempts: number;
   logos: { slug: string; logo: string | null; name: string }[];
 };
-
-const TONE = { protected: "var(--good)", partial: "var(--warn)", off: "var(--bad)" } as const;
 
 export default function Home() {
   const { t, locale, errText, toast } = useApp();
@@ -84,7 +83,6 @@ export default function Home() {
       </div>
     );
 
-  const tone = TONE[d.status];
   const actions: { icon: IconName; label: string; href?: string; onClick?: () => void; primary?: boolean }[] = [
     { icon: native ? "scan" : "plus", label: native ? t("sc.btn") : t("q.add_app"), href: native ? "/apps?scan=1" : "/apps?add=1", primary: true },
     { icon: "vault", label: t("q.vault"), href: "/vault" },
@@ -98,32 +96,27 @@ export default function Home() {
     <div className="space-y-4">
       <p className="px-1 text-lg text-muted">{t("h.hello", { name: d.name.split(" ")[0] })}</p>
 
-      <motion.section initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="glass relative overflow-hidden p-6">
+      <section className="rise glass relative overflow-hidden p-6" style={{ ["--rise" as string]: "16px" }}>
         <div className="relative">
-          <h1 className="font-display text-[clamp(1.85rem,9vw,2.6rem)] font-semibold leading-tight tracking-tight [overflow-wrap:anywhere]" style={{ color: tone }}>
-            {t(`h.st.${d.status}`)}
-          </h1>
-          <p className="mt-3 max-w-sm text-muted">{t(`h.st.${d.status}.d`)}</p>
+          <InterceptStream />
           <div className="mt-6 grid grid-cols-4 gap-2.5">
             {actions.map((a) => (
               <div key={a.label} className="flex min-w-0 flex-col items-center gap-2">
                 {a.href ? (
-                  <motion.span whileTap={{ scale: 0.92 }} className="block w-full">
-                    <Link href={a.href} aria-label={a.label} className={`grid h-14 w-full place-items-center rounded-full ${a.primary ? "btn-primary" : "border border-line bg-surface-2"}`}>
-                      <Icon name={a.icon} size={22} />
-                    </Link>
-                  </motion.span>
+                  <Link href={a.href} aria-label={a.label} className={`grid h-14 w-full place-items-center rounded-full transition-transform duration-75 active:scale-[0.92] ${a.primary ? "btn-primary" : "border border-line bg-surface-2"}`}>
+                    <Icon name={a.icon} size={22} />
+                  </Link>
                 ) : (
-                  <motion.button whileTap={{ scale: 0.92 }} onClick={a.onClick} aria-label={a.label} aria-busy={exporting} className={`grid h-14 w-full place-items-center rounded-full border border-line bg-surface-2 ${exporting ? "opacity-60" : ""}`}>
+                  <button onClick={a.onClick} aria-label={a.label} aria-busy={exporting} className={`grid h-14 w-full place-items-center rounded-full border border-line bg-surface-2 transition-transform duration-75 active:scale-[0.92] ${exporting ? "opacity-60" : ""}`}>
                     {exporting ? <span className="h-5 w-5 animate-spin rounded-full border-2 border-current border-t-transparent" /> : <Icon name={a.icon} size={22} />}
-                  </motion.button>
+                  </button>
                 )}
                 <span className="w-full text-center text-[11px] font-semibold leading-tight text-muted [overflow-wrap:anywhere] [hyphens:auto]">{a.label}</span>
               </div>
             ))}
           </div>
         </div>
-      </motion.section>
+      </section>
 
       {!d.deviceConnected && (
         <Link href="/device" className="glass flex items-center gap-4 p-4">
@@ -137,15 +130,20 @@ export default function Home() {
       )}
 
       <div className="grid grid-cols-2 gap-3 sm:gap-4 [&>*]:min-w-0">
-        <Link href="/apps" className="glass relative overflow-hidden p-4 sm:p-5" style={{ background: "linear-gradient(150deg, color-mix(in srgb, var(--primary) 38%, transparent), var(--surface))" }}>
-          <p className="text-sm font-semibold">{t("h.monitored")}</p>
+        {/* The card opens the Apps tab; each app logo opens that app's full history. */}
+        <div className="glass relative overflow-hidden p-4 sm:p-5" style={{ background: "linear-gradient(150deg, color-mix(in srgb, var(--primary) 38%, transparent), var(--surface))" }}>
+          <Link href="/apps" className="block text-sm font-semibold after:absolute after:inset-0 after:content-['']">{t("h.monitored")}</Link>
           <p className="font-display mt-1 text-4xl font-semibold">{num(d.appsMonitored, locale)}</p>
           <div className="mt-4 flex -space-x-3">
-            {logos.map((a) => <AppLogo key={a.slug} slug={a.slug} logo={a.logo} name={a.name} size={36} className="ring-2 ring-[var(--bg)]" />)}
+            {logos.map((a) => (
+              <Link key={a.slug} href={`/apps/${encodeURIComponent(a.slug)}`} aria-label={a.name} className="relative z-10 rounded-full transition-transform duration-75 active:scale-90">
+                <AppLogo slug={a.slug} logo={a.logo} name={a.name} size={36} className="ring-2 ring-[var(--bg)]" />
+              </Link>
+            ))}
             {extra > 0 && <span className="grid h-9 w-9 place-items-center rounded-full bg-[#0d0d0f] text-xs font-bold text-white ring-2 ring-[var(--bg)]">+{extra}</span>}
             {logos.length === 0 && <span className="text-xs text-muted">{t("a.none")}</span>}
           </div>
-        </Link>
+        </div>
         <Link href="/wallet" className="glass p-4 sm:p-5" style={{ background: "linear-gradient(150deg, color-mix(in srgb, var(--good) 26%, transparent), var(--surface))" }}>
           <p className="text-sm font-semibold">{t("h.month")}</p>
           <p className="font-display mt-1 text-3xl font-semibold">{money(d.wallet.month, locale)}</p>

@@ -37,7 +37,7 @@ export default function VaultPage() {
           const R = 22;
           const C = 2 * Math.PI * R;
           return (
-            <motion.div key={c.category} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
+            <div key={c.category} className="rise" style={{ animationDelay: `${i * 50}ms`, ["--rise" as string]: "16px" }}>
               <Link href={`/vault/${c.category}`} className="glass relative block overflow-hidden p-5" style={{ background: `linear-gradient(145deg, color-mix(in srgb, ${col.from} 26%, transparent), var(--surface) 70%)` }}>
                 <div className="flex items-start justify-between">
                   <span className="grid h-12 w-12 place-items-center rounded-2xl text-white" style={{ background: `linear-gradient(145deg, ${col.from}, ${col.to})` }}>
@@ -58,7 +58,7 @@ export default function VaultPage() {
                   <p>{t("v.value")}: {t("v.value.na")}</p>
                 </div>
               </Link>
-            </motion.div>
+            </div>
           );
         })}
       </div>

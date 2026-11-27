@@ -4,12 +4,13 @@ import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { Wordmark } from "@/components/Wordmark";
 
-export function Splash() {
+export function Splash({ signedIn = false }: { signedIn?: boolean }) {
   const router = useRouter();
   const [leaving, setLeaving] = useState(false);
 
   useEffect(() => {
-    const target = typeof localStorage !== "undefined" && localStorage.getItem("dt_intro") ? "/login" : "/welcome";
+    // Signed in -> Home. Otherwise the intro the first time on this device, then sign-in.
+    const target = signedIn ? "/home" : typeof localStorage !== "undefined" && localStorage.getItem("dt_intro") ? "/login" : "/welcome";
     router.prefetch(target);
     const a = setTimeout(() => setLeaving(true), 2600);
     const b = setTimeout(() => router.replace(target), 3200);
@@ -17,7 +18,7 @@ export function Splash() {
       clearTimeout(a);
       clearTimeout(b);
     };
-  }, [router]);
+  }, [router, signedIn]);
 
   return (
     <motion.main

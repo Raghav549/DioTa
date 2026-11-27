@@ -6,11 +6,16 @@ import { hmac, safeEqual, sha256 } from "@/lib/crypto";
 import { clientIp, rateLimit } from "@/lib/security";
 import { configProblems } from "@/lib/config";
 import { ensureSchema } from "@/db/migrate";
+import { interceptTotals } from "@/lib/intercepts";
 
 /**
  * Integration-ready endpoint for a future, separately built B2B marketplace.
  * Disabled until PARTNER_API_SECRET is configured. Returns only pseudonymous references
  * and the categories users have explicitly allowed. It never returns personal content.
+ *
+ * `signals` comes from the vault pipeline: per allowed category, how many tracking attempts DioTa's
+ * shield blocked on the user's phone, by kind (ads, analytics, location, ...). Counts only: no app
+ * names, domains, times or content.
  */
 export const dynamic = "force-dynamic";
 
@@ -25,10 +30,24 @@ export async function GET(req: NextRequest) {
   // Compare fixed-length digests so neither the content nor the length of the secret leaks via timing.
   if (!token || !safeEqual(sha256(token), sha256(secret))) return NextResponse.json({ error: "unauthorized" }, { status: 401, headers: h });
   const rows = await db.select().from(vaultCategories).where(eq(vaultCategories.mode, "selected"));
-  const grouped = new Map<string, string[]>();
-  for (const r of rows) {
-    const ref = hmac("partner", r.userId);
-    grouped.set(ref, [...(grouped.get(ref) ?? []), r.category]);
+  const allowed = new Map<string, Set<string>>();
+  for (const r of rows) allowed.set(r.userId, (allowed.get(r.userId) ?? new Set()).add(r.category));
+  const totals = await interceptTotals([...allowed.keys()]);
+  const signals = new Map<string, Record<string, Record<string, number>>>();
+  for (const t of totals) {
+    if (!allowed.get(t.userId)?.has(t.category)) continue; // only categories the user shares
+    const s = signals.get(t.userId) ?? {};
+    (s[t.category] ??= {})[t.kind] = t.n;
+    signals.set(t.userId, s);
   }
-  return NextResponse.json({ consents: [...grouped].map(([ref, categories]) => ({ ref, categories })) }, { headers: h });
+  return NextResponse.json(
+    {
+      consents: [...allowed].map(([userId, categories]) => ({
+        ref: hmac("partner", userId),
+        categories: [...categories],
+        signals: signals.get(userId) ?? {},
+      })),
+    },
+    { headers: h },
+  );
 }

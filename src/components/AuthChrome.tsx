@@ -1,6 +1,5 @@
 "use client";
 import { useState, type ReactNode } from "react";
-import { motion } from "framer-motion";
 import { Wordmark } from "@/components/Wordmark";
 import { Icon } from "@/components/Icon";
 import { useApp } from "@/components/Providers";
@@ -24,9 +23,9 @@ export function AuthChrome({ children }: { children: ReactNode }) {
           </button>
         </div>
       </header>
-      <motion.div className="flex flex-1 flex-col justify-center py-8" initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}>
+      <div className="rise flex flex-1 flex-col justify-center py-8" style={{ ["--rise" as string]: "18px", animationDuration: "0.5s" }}>
         {children}
-      </motion.div>
+      </div>
       <Sheet open={open} onClose={() => setOpen(false)} title={t("lang.t")}>
         <LanguagePicker persist={false} />
       </Sheet>

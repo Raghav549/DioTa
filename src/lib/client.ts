@@ -30,10 +30,24 @@ export async function api<T = { ok: true }>(url: string, opts: { method?: string
   return data as T;
 }
 
+/**
+ * Last response per URL for this tab. Screens you've already opened render instantly from it
+ * while fresh data loads in the background (stale-while-revalidate). Cleared on sign-out (full reload).
+ */
+const apiCache = new Map<string, unknown>();
+export const clearApiCache = () => apiCache.clear();
+
 export function useApi<T>(url: string | null) {
-  const [data, setData] = useState<T | null>(null);
+  const [data, setDataState] = useState<T | null>(() => (url && apiCache.has(url) ? (apiCache.get(url) as T) : null));
   const [error, setError] = useState<ApiErr | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => !(url && apiCache.has(url)));
+  const setData = useCallback(
+    (d: T) => {
+      if (url) apiCache.set(url, d);
+      setDataState(d);
+    },
+    [url],
+  );
   const load = useCallback(async () => {
     if (!url) return;
     try {
@@ -44,7 +58,7 @@ export function useApi<T>(url: string | null) {
     } finally {
       setLoading(false);
     }
-  }, [url]);
+  }, [url, setData]);
   useEffect(() => {
     if (!url) return;
     let alive = true; // ignore responses that arrive after the URL changed / unmount
@@ -61,7 +75,7 @@ export function useApi<T>(url: string | null) {
     return () => {
       alive = false;
     };
-  }, [url]);
+  }, [url, setData]);
   return { data, error, loading, reload: load };
 }
 

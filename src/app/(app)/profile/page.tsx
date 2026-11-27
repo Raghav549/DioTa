@@ -4,7 +4,7 @@ import { Avatar, imageFileToDataUrl } from "@/components/Avatar";
 import { Icon, type IconName } from "@/components/Icon";
 import { useApp } from "@/components/Providers";
 import { Button, Card, Confirm, Row, Sheet, Skeleton } from "@/components/ui";
-import { api, useApi } from "@/lib/client";
+import { api, useApi, clearApiCache } from "@/lib/client";
 
 const GROUPS: { id: string; icon: IconName }[][] = [
   [
@@ -51,6 +51,7 @@ export default function ProfilePage() {
   async function logout() {
     setBusy(true);
     await api("/api/auth/logout", { method: "POST" }).catch(() => {});
+    clearApiCache();
     window.location.assign("/login");
   }
 

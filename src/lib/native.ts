@@ -21,6 +21,9 @@ export type NativeStatus = {
   /** Installed-apps visibility is granted at install time (QUERY_ALL_PACKAGES). */
   apps: boolean;
   firewallRunning: boolean;
+  /** Tracker shield (blocks tracker endpoints for every app on the phone) is on and running. */
+  shield?: boolean;
+  shieldRunning?: boolean;
   sdk: number;
   version: string;
 };
@@ -41,7 +44,7 @@ export type PhoneApp = {
   icon?: string;
 };
 
-export type Firewall = { packages: string[]; running: boolean; attempts: Record<string, number> };
+export type Firewall = { packages: string[]; running: boolean; attempts: Record<string, number>; shield?: boolean };
 
 type Bridge = { call: (id: string, method: string, args: string) => void };
 type Pending = { resolve: (v: unknown) => void; reject: (e: Error) => void };
@@ -96,6 +99,13 @@ export const Phone = {
   firewall: () => call<Firewall>("firewall"),
   /** Replaces the list of apps whose internet is blocked. Starts or stops the on-device firewall. */
   setBlocked: (packages: string[]) => call<Firewall>("setBlocked", { packages }, 10 * 60_000),
+  /**
+   * Turns the tracker shield on or off. It needs the VPN permission (Android asks once).
+   * `ask: false` never shows a dialog (used to follow the Protection switch silently).
+   */
+  setShield: (on: boolean, ask = true) => call<Firewall>("setShield", { on, ask }, 10 * 60_000),
+  /** Sends blocked attempts waiting on the phone to your account now (normally every few seconds). */
+  flushIntercepts: () => call<{ queued: number }>("flushIntercepts", {}, 30_000),
   openAppSettings: (pkg: string) => call<{ ok: true }>("openAppSettings", { pkg }),
   notify: (title: string, body: string) => call<{ ok: true }>("notify", { title, body }),
   saveFile: (name: string, mime: string, base64: string) => call<{ name: string; location: string }>("saveFile", { name, mime, base64 }),

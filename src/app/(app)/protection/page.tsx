@@ -6,6 +6,7 @@ import { Icon, type IconName } from "@/components/Icon";
 import { useApp } from "@/components/Providers";
 import { Card, Empty, PageHeader, Pill, Skeleton, Toggle } from "@/components/ui";
 import { api, num, useApi } from "@/lib/client";
+import { Phone, isNative } from "@/lib/native";
 
 type Dash = { status: string; protectionEnabled: boolean; monitoringEnabled: boolean; appsMonitored: number; appsTotal: number; alerts: number; eventsTotal: number };
 
@@ -40,7 +41,10 @@ export default function ProtectionPage() {
 
   async function patch(body: Record<string, boolean>) {
     try {
+      // Android app: Protection also switches the on-phone tracker shield (asks for the VPN permission once).
+      if (body.protectionEnabled !== undefined && isNative()) await Phone.setShield(body.protectionEnabled).catch(() => {});
       await api("/api/me", { method: "PATCH", body });
+      window.dispatchEvent(new Event("dt:me-changed"));
       await reload();
     } catch (e) {
       toast(errText(e), "err");

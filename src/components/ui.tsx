@@ -7,7 +7,7 @@ import { haptic } from "@/lib/client";
 import { appName, isCatalogSlug, isPackageSlug } from "@/lib/catalog";
 
 /* ---------- Button ---------- */
-type BtnProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, "onDrag" | "onDragStart" | "onDragEnd" | "onAnimationStart"> & {
+type BtnProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: "primary" | "soft" | "danger" | "ghost";
   loading?: boolean;
   full?: boolean;
@@ -20,21 +20,19 @@ export function Button({ variant = "primary", loading, full, children, className
     ghost: "text-muted hover:text-fg",
   }[variant];
   return (
-    <motion.button
-      whileTap={{ scale: 0.97 }}
-      whileHover={{ y: -1 }}
-      transition={{ type: "spring", stiffness: 500, damping: 30 }}
+    // Press feedback is pure CSS (GPU transform), so taps respond on the very first frame.
+    <button
       disabled={disabled || loading}
       onClick={(e) => {
         haptic();
         onClick?.(e);
       }}
-      className={`relative inline-flex items-center justify-center gap-2 rounded-full px-6 py-3.5 text-[15px] font-semibold disabled:cursor-not-allowed disabled:opacity-60 ${v} ${full ? "w-full" : ""} ${className}`}
+      className={`relative inline-flex items-center justify-center gap-2 rounded-full px-6 py-3.5 text-[15px] font-semibold transition-transform duration-150 ease-out hover:-translate-y-px active:translate-y-0 active:scale-[0.97] active:duration-75 disabled:cursor-not-allowed disabled:opacity-60 disabled:active:scale-100 ${v} ${full ? "w-full" : ""} ${className}`}
       {...rest}
     >
       {loading && <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" aria-hidden />}
       {children}
-    </motion.button>
+    </button>
   );
 }
 

@@ -1,5 +1,5 @@
 "use client";
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { dictionaries, localeOf, translate } from "@/i18n";
 import type { LangCode, Theme } from "@/lib/catalog";
@@ -60,6 +60,26 @@ export function Providers({ lang: l0, theme: t0, children }: { lang: LangCode; t
     },
     [t],
   );
+
+  // While the page scrolls, decorative paint animations pause (see .is-scrolling in globals.css),
+  // so every frame of a scroll goes to moving content. Passive listener: never delays scrolling.
+  useEffect(() => {
+    const root = document.documentElement;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const onScroll = () => {
+      if (!timer) root.classList.add("is-scrolling");
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        timer = undefined;
+        root.classList.remove("is-scrolling");
+      }, 160);
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      clearTimeout(timer);
+    };
+  }, []);
 
   const value = useMemo(
     () => ({ lang, locale: localeOf(lang), t, setLang, theme, setTheme, toast, errText }),
