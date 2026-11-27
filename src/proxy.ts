@@ -14,6 +14,9 @@ export function proxy(req: NextRequest) {
     "base-uri 'self'",
     "form-action 'self'",
     "frame-ancestors 'none'",
+    "manifest-src 'self'",
+    "worker-src 'self' blob:",
+    ...(dev ? [] : ["upgrade-insecure-requests"]),
   ].join("; ");
 
   const requestHeaders = new Headers(req.headers);
@@ -25,9 +28,10 @@ export function proxy(req: NextRequest) {
   res.headers.set("X-Content-Type-Options", "nosniff");
   res.headers.set("X-Frame-Options", "DENY");
   res.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
-  res.headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=()");
+  res.headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()");
   res.headers.set("Cross-Origin-Opener-Policy", "same-origin");
-  res.headers.set("Strict-Transport-Security", "max-age=63072000; includeSubDomains");
+  res.headers.set("Cross-Origin-Resource-Policy", "same-origin");
+  if (!dev) res.headers.set("Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload");
   return res;
 }
 

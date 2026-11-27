@@ -1,7 +1,8 @@
 import { LoginForm } from "@/components/LoginForm";
+import { googleConfigured } from "@/lib/oauth";
 
 export default async function LoginPage({ searchParams }: { searchParams: Promise<{ e?: string }> }) {
   const sp = await searchParams;
-  const google = !!process.env.GOOGLE_CLIENT_ID && !!process.env.GOOGLE_CLIENT_SECRET;
-  return <LoginForm google={google} googleError={sp.e === "google"} />;
+  const googleError = sp.e === "google_exists" ? "err.email_taken" : sp.e === "google" ? "err.generic" : null;
+  return <LoginForm google={googleConfigured()} googleError={googleError} />;
 }

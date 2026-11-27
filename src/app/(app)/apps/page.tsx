@@ -1,6 +1,7 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import { Icon } from "@/components/Icon";
 import { useApp } from "@/components/Providers";
@@ -29,12 +30,9 @@ export default function AppsPage() {
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
   const [sort, setSort] = useState<Sort>("name");
-  const [adding, setAdding] = useState(false);
+  const searchParams = useSearchParams();
+  const [adding, setAdding] = useState(() => !!searchParams.get("add"));
   const [busy, setBusy] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (new URLSearchParams(window.location.search).get("add")) setAdding(true);
-  }, []);
 
   const list = useMemo(() => {
     let r = (data?.apps ?? []).filter((a) => appName(a.slug).toLowerCase().includes(q.trim().toLowerCase()));
