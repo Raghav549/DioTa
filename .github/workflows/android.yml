@@ -74,10 +74,17 @@ jobs:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
         run: |
-          gradle assembleRelease --no-daemon --stacktrace \
+          set -o pipefail
+          # Compiler / resource errors are also raised as annotations, so they show on the PR itself.
+          if ! gradle assembleRelease --no-daemon --stacktrace \
             -PdiotaUrl="$SITE_URL" \
             -PversionCode="${{ github.run_number }}" \
-            -PversionName="1.0.${{ github.run_number }}"
+            -PversionName="1.0.${{ github.run_number }}" 2>&1 | tee "$RUNNER_TEMP/gradle.log"; then
+            grep -E "(error:|ERROR:|What went wrong|\.java:[0-9]+|\.xml:[0-9]+|AAPT)" "$RUNNER_TEMP/gradle.log" | head -25 | while IFS= read -r line; do
+              echo "::error::${line//$'\r'/}"
+            done
+            exit 1
+          fi
           mkdir -p "$RUNNER_TEMP/out"
           cp app/build/outputs/apk/release/app-release.apk "$RUNNER_TEMP/out/DioTa.apk"
           ls -l "$RUNNER_TEMP/out"
