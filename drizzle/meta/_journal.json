@@ -29,6 +29,13 @@
       "when": 1795784939164,
       "tag": "0003_device_and_avatar",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1795790804902,
+      "tag": "0004_intercepts",
+      "breakpoints": true
     }
   ]
 }

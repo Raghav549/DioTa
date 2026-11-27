@@ -52,8 +52,9 @@ public class NativeBridge {
     private String pendingId;
     private String pendingName;
     private boolean pendingWaitsForResume;
-    /** setBlocked waiting for the VPN consent dialog. */
+    /** setBlocked / setShield waiting for the VPN consent dialog. */
     private String vpnPendingId;
+    private boolean vpnPendingIsBlock;
     private Set<String> vpnPendingPackages;
     private Set<String> vpnPreviousPackages;
 
@@ -95,6 +96,12 @@ public class NativeBridge {
                 break;
             case "setBlocked":
                 main.post(() -> setBlocked(id, stringSet(args.optJSONArray("packages"))));
+                break;
+            case "setShield":
+                main.post(() -> setShield(id, args.optBoolean("on"), args.optBoolean("ask", true)));
+                break;
+            case "flushIntercepts":
+                worker.execute(() -> resolveSafe(id, () -> new JSONObject().put("queued", InterceptStore.get(activity).flushNow())));
                 break;
             case "openAppSettings":
                 main.post(() -> openAppSettings(id, args.optString("pkg")));
@@ -192,6 +199,8 @@ public class NativeBridge {
         o.put("photos", photosOn());
         o.put("apps", Build.VERSION.SDK_INT < 30 || granted(Manifest.permission.QUERY_ALL_PACKAGES));
         o.put("firewallRunning", FirewallService.isRunning());
+        o.put("shield", Firewall.shield(activity));
+        o.put("shieldRunning", FirewallService.isShieldRunning());
         o.put("sdk", Build.VERSION.SDK_INT);
         o.put("version", BuildConfig.VERSION_NAME);
         return o;
@@ -336,15 +345,21 @@ public class NativeBridge {
         packages.remove(activity.getPackageName()); // never block DioTa itself
         Set<String> previous = Firewall.blocked(activity);
         Firewall.saveBlocked(activity, packages);
-        if (packages.isEmpty()) {
+        if (!Firewall.wanted(activity)) {
             FirewallService.stop(activity);
             worker.execute(() -> resolveSafe(id, () -> Firewall.state(activity)));
             return;
         }
         Intent consent = VpnService.prepare(activity);
         if (consent != null) {
+            if (packages.isEmpty()) {
+                // Only the shield wants the VPN and it isn't allowed yet: nothing to start now.
+                worker.execute(() -> resolveSafe(id, () -> Firewall.state(activity)));
+                return;
+            }
             if (vpnPendingId != null) reject(vpnPendingId, "cancelled");
             vpnPendingId = id;
+            vpnPendingIsBlock = true;
             vpnPendingPackages = packages;
             vpnPreviousPackages = previous;
             try {
@@ -362,16 +377,48 @@ public class NativeBridge {
         if (vpnPendingId != null) {
             String id = vpnPendingId;
             if (ok) FirewallService.apply(activity);
-            else Firewall.saveBlocked(activity, vpnPreviousPackages == null ? new HashSet<>() : vpnPreviousPackages);
+            else if (vpnPendingIsBlock) Firewall.saveBlocked(activity, vpnPreviousPackages == null ? new HashSet<>() : vpnPreviousPackages);
+            // (a declined shield stays wanted: it starts once the VPN is allowed on the phone access screen)
             vpnPendingId = null;
+            vpnPendingIsBlock = false;
             vpnPendingPackages = null;
             vpnPreviousPackages = null;
             worker.execute(() -> resolveSafe(id, () -> Firewall.state(activity)));
         }
         if (pendingId != null && "vpn".equals(pendingName)) {
-            if (ok && !Firewall.blocked(activity).isEmpty()) FirewallService.apply(activity);
+            if (ok && Firewall.wanted(activity)) FirewallService.apply(activity);
             finishPending();
         }
+    }
+
+    /** Tracker shield on/off (follows Protection). `ask` = may show the VPN permission dialog. */
+    private void setShield(String id, boolean on, boolean ask) {
+        boolean was = Firewall.shield(activity);
+        Firewall.setShield(activity, on);
+        if (!on) {
+            if (Firewall.blocked(activity).isEmpty()) FirewallService.stop(activity);
+            else if (was) FirewallService.apply(activity); // back to blocking only the chosen apps
+            worker.execute(() -> resolveSafe(id, () -> Firewall.state(activity)));
+            return;
+        }
+        Intent consent = VpnService.prepare(activity);
+        if (consent != null) {
+            if (!ask) {
+                worker.execute(() -> resolveSafe(id, () -> Firewall.state(activity)));
+                return;
+            }
+            if (vpnPendingId != null) reject(vpnPendingId, "cancelled");
+            vpnPendingId = id;
+            vpnPendingIsBlock = false;
+            try {
+                activity.startActivityForResult(consent, MainActivity.REQ_VPN);
+            } catch (ActivityNotFoundException e) {
+                onVpnConsent(false);
+            }
+            return;
+        }
+        if (!was || !FirewallService.isShieldRunning()) FirewallService.apply(activity);
+        worker.execute(() -> resolveSafe(id, () -> Firewall.state(activity)));
     }
 
     // ---------- misc ----------

@@ -23,7 +23,7 @@ const NAV: { href: string; key: string; icon: IconName }[] = [
 export function AppShell({ children }: { children: ReactNode; name: string }) {
   const { t } = useApp();
   const path = usePathname();
-  const { data: me, reload: reloadMe } = useApi<{ user: AvatarUser }>("/api/me");
+  const { data: me, reload: reloadMe } = useApi<{ user: AvatarUser & { protectionEnabled?: boolean } }>("/api/me");
   useEffect(() => {
     // The profile page fires this after the photo or name changes, so the header updates at once.
     window.addEventListener("dt:me-changed", reloadMe);
@@ -36,6 +36,14 @@ export function AppShell({ children }: { children: ReactNode; name: string }) {
   useEffect(() => {
     if (isNative() && path !== "/device" && !localStorage.getItem(ONBOARDED_KEY)) router.replace("/device");
   }, [path, router]);
+
+  // Android app: the tracker shield follows the Protection switch. Silent: it never pops up the VPN
+  // dialog here (that is asked on the phone access screen or when you turn Protection on).
+  const protectionOn = me?.user.protectionEnabled;
+  useEffect(() => {
+    if (!isNative() || protectionOn === undefined) return;
+    Phone.setShield(protectionOn, false).catch(() => {});
+  }, [protectionOn]);
 
   // Android app: read real data from the phone when the app opens and whenever it comes back.
   useEffect(() => {

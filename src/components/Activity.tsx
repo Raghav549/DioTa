@@ -1,4 +1,5 @@
 "use client";
+import { memo } from "react";
 import { Icon, type IconName } from "@/components/Icon";
 import { useApp } from "@/components/Providers";
 import { AppLogo } from "@/components/ui";
@@ -6,18 +7,32 @@ import { money, rel } from "@/lib/client";
 
 export type Ev = { id: string; type: string; params: Record<string, string>; appSlug?: string | null; createdAt: string };
 
-export function eventText(t: (k: string, p?: Record<string, string | number>) => string, ev: Pick<Ev, "type" | "params">) {
+type T = (k: string, p?: Record<string, string | number>) => string;
+
+/** "Ad-ID, device details and IP address", in the user's language. */
+export function dataList(t: T, locale: string, keys: readonly string[]) {
+  const items = keys.map((k) => t(`dk.${k}`));
+  try {
+    return new Intl.ListFormat(locale, { style: "long", type: "conjunction" }).format(items);
+  } catch {
+    return items.join(", ");
+  }
+}
+
+export function eventText(t: T, ev: Pick<Ev, "type" | "params">, locale = "en-IN") {
   const p = { ...ev.params };
   if (p.perm) p.perm = t(`perm.${p.perm}`);
   if (p.cat) p.cat = t(`cat.${p.cat}`);
   if (p.mode) p.mode = t(`m.${p.mode}`);
-  return t(`ev.${ev.type}`, p);
+  if (p.data !== undefined) p.data = dataList(t, locale, p.data ? p.data.split(",") : []);
+  if (p.trigger !== undefined) p.trigger = t(`tg.${p.trigger}`);
+  return t(`ev.${ev.type}`, p).replace(/\s{2,}/g, " ").replace(/\s+([.,…])/g, "$1");
 }
 
 const iconFor = (type: string): IconName =>
-  type.startsWith("perm") ? "alert" : type.startsWith("vault") || type === "cat_mode" ? "vault" : type.startsWith("payment") || type.startsWith("withdraw") ? "wallet" : type === "login" || type === "password_changed" ? "lock" : type === "export" ? "download" : type.startsWith("app") || type.includes("monitoring") || type.startsWith("use") ? "apps" : "shield";
+  type.startsWith("intercept") ? "block" : type.startsWith("perm") ? "alert" : type.startsWith("vault") || type === "cat_mode" ? "vault" : type.startsWith("payment") || type.startsWith("withdraw") ? "wallet" : type === "login" || type === "password_changed" ? "lock" : type === "export" ? "download" : type.startsWith("app") || type.includes("monitoring") || type.startsWith("use") ? "apps" : "shield";
 
-export function EventList({ events }: { events: Ev[] }) {
+export const EventList = memo(function EventList({ events }: { events: Ev[] }) {
   const { t, locale } = useApp();
   return (
     <ul className="divide-y divide-line">
@@ -31,14 +46,14 @@ export function EventList({ events }: { events: Ev[] }) {
             </span>
           )}
           <div className="min-w-0 flex-1">
-            <p className="text-[15px] font-semibold leading-snug">{eventText(t, e)}</p>
+            <p className="text-[15px] font-semibold leading-snug">{eventText(t, e, locale)}</p>
             <p className="text-xs text-muted">{rel(e.createdAt, locale)}</p>
           </div>
         </li>
       ))}
     </ul>
   );
-}
+});
 
 export type Tx = { id: string; type: string; amountPaise: number; status: string; createdAt: string };
 

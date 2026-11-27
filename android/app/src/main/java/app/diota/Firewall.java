@@ -13,11 +13,12 @@ import java.util.Iterator;
 import java.util.Map;
 import java.util.Set;
 
-/** Stored firewall settings: which apps are blocked and how many connection attempts were stopped. */
+/** Stored firewall settings: which apps are blocked, whether the tracker shield is on, and how many attempts were stopped. */
 final class Firewall {
     private static final String PREFS = "firewall";
     private static final String KEY_BLOCKED = "blocked";
     private static final String KEY_ATTEMPTS = "attempts";
+    private static final String KEY_SHIELD = "shield";
     private static final Object LOCK = new Object();
 
     private Firewall() {
@@ -33,6 +34,20 @@ final class Firewall {
 
     static void saveBlocked(Context c, Set<String> packages) {
         prefs(c).edit().putStringSet(KEY_BLOCKED, new HashSet<>(packages)).apply();
+    }
+
+    /** Tracker shield wanted (follows the Protection switch in the app). */
+    static boolean shield(Context c) {
+        return prefs(c).getBoolean(KEY_SHIELD, false);
+    }
+
+    static void setShield(Context c, boolean on) {
+        prefs(c).edit().putBoolean(KEY_SHIELD, on).apply();
+    }
+
+    /** True when the VPN should run at all (the shield, or at least one blocked app). */
+    static boolean wanted(Context c) {
+        return shield(c) || !blocked(c).isEmpty();
     }
 
     static Map<String, Long> attempts(Context c) {
@@ -66,6 +81,8 @@ final class Firewall {
         JSONObject o = new JSONObject();
         o.put("packages", new JSONArray(blocked(c)));
         o.put("running", FirewallService.isRunning());
+        o.put("shield", shield(c));
+        o.put("shieldRunning", FirewallService.isShieldRunning());
         JSONObject a = new JSONObject();
         for (Map.Entry<String, Long> e : attempts(c).entrySet()) a.put(e.getKey(), e.getValue());
         o.put("attempts", a);

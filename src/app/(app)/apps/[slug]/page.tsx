@@ -1,18 +1,19 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { EventList, type Ev } from "@/components/Activity";
+import { EventList, dataList, type Ev } from "@/components/Activity";
+import type { Caught } from "@/components/InterceptStream";
 import { useApp } from "@/components/Providers";
 import { AppLogo, Button, Card, Confirm, Empty, PageHeader, Pill, Skeleton, Toggle } from "@/components/ui";
 import { Icon } from "@/components/Icon";
 import { CATEGORIES, PERMISSIONS, SENSITIVE } from "@/lib/catalog";
-import { api, bytes, dateFmt, rel, useApi } from "@/lib/client";
+import { api, bytes, dateFmt, num, rel, useApi } from "@/lib/client";
 import { setAppBlocked } from "@/lib/blocking";
 import { packageOf, syncPhone } from "@/lib/deviceSync";
 import { Phone, isNative, useIsNative } from "@/lib/native";
 import type { AppRow } from "../page";
 
-type Detail = { app: Omit<AppRow, "events">; events: Ev[] };
+type Detail = { app: Omit<AppRow, "events">; events: Ev[]; intercepts?: (Caught & { category: string; firstAt: string })[] };
 
 export default function AppDetail() {
   const { slug } = useParams<{ slug: string }>();
@@ -27,7 +28,7 @@ export default function AppDetail() {
   // Android app: refresh this app's real data from the phone when the page opens.
   useEffect(() => {
     if (!isNative()) return;
-    syncPhone().then(reload, () => {});
+    Promise.allSettled([syncPhone(), Phone.flushIntercepts()]).then(() => reload());
   }, [reload]);
 
   async function block(v: boolean) {
@@ -71,6 +72,8 @@ export default function AppDetail() {
   const name = a.name;
   const fromPhone = a.source === "device";
   const pkg = packageOf(a);
+  const caught = data.intercepts ?? [];
+  const caughtTotal = caught.reduce((n, c) => n + c.count, 0);
   const toggleIn = (list: string[], v: string) => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);
 
   return (
@@ -172,6 +175,33 @@ export default function AppDetail() {
           <div><p className="text-xs text-muted">{t("a.lastused")}</p><p className="text-sm font-semibold">{a.lastUsedAt ? rel(a.lastUsedAt, locale) : t("c.na")}</p></div>
           <div><p className="text-xs text-muted">{t("a.events")}</p><p className="text-sm font-semibold">{data.events.length}</p></div>
         </div>
+      </Card>
+
+      <Card>
+        <div className="flex items-start justify-between gap-3">
+          <h2 className="min-w-0 text-lg font-bold">{t("a.caught")}</h2>
+          {caught.length > 0 && <Pill tone="good" className="shrink-0 whitespace-nowrap">{t("a.caught.total", { n: num(caughtTotal, locale) })}</Pill>}
+        </div>
+        <p className="mt-1 text-sm text-muted">{t("a.caught.d", { app: name })}</p>
+        {caught.length ? (
+          <ul className="mt-2 divide-y divide-line">
+            {caught.map((c) => (
+              <li key={c.id} className="flex gap-3.5 py-3.5 [content-visibility:auto] [contain-intrinsic-size:auto_92px]">
+                <span className="mt-0.5 grid h-[42px] w-[42px] shrink-0 place-items-center rounded-full bg-bad/12 text-bad"><Icon name="block" size={19} /></span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[15px] font-semibold leading-snug">
+                    {(c.kind === "app" ? t("a.caught.app", { trigger: t(`tg.${c.trigger}`) }) : t("a.caught.t", { data: dataList(t, locale, c.data), trigger: t(`tg.${c.trigger}`) })).replace(/\s{2,}/g, " ").trim()}
+                  </p>
+                  {c.kind !== "app" && <p className="truncate text-sm text-muted">{c.org} · {c.domain}</p>}
+                  <p className="mt-0.5 text-xs font-semibold text-good">{t("a.caught.how", { cat: t(`cat.${c.category}`) })}</p>
+                  <p className="text-xs text-muted">{rel(c.at, locale)}{c.count > 1 ? ` · ×${num(c.count, locale)}` : ""}</p>
+                </div>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <Empty icon="shield" title={t("a.caught.empty")} />
+        )}
       </Card>
 
       <Card>

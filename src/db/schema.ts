@@ -116,8 +116,39 @@ export const vaultItems = pgTable(
     size: integer("size").notNull().default(0),
     createdAt: ts("created_at").notNull().defaultNow(),
     updatedAt: ts("updated_at").notNull().defaultNow(),
+    /** Set on items DioTa files automatically from blocked attempts: a keyed hash of app + tracker + category. */
+    sourceKey: text("source_key"),
+    /** Encrypted running totals behind an automatic item (count, times, triggers, endpoints). */
+    metaEnc: text("meta_enc"),
   },
-  (t) => [index("vault_user_cat").on(t.userId, t.category)],
+  (t) => [index("vault_user_cat").on(t.userId, t.category), uniqueIndex("vault_user_source").on(t.userId, t.sourceKey)],
+);
+
+/** Attempts by apps on the user's phone to reach trackers (or the internet, when blocked), stopped by DioTa. */
+export const intercepts = pgTable(
+  "intercepts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    /** Catalog slug, or the Android package name for other apps. */
+    appSlug: text("app_slug").notNull(),
+    category: text("category").notNull(),
+    kind: text("kind").notNull(),
+    trigger: text("trigger").notNull(),
+    count: integer("count").notNull().default(1),
+    firstAt: ts("first_at").notNull(),
+    lastAt: ts("last_at").notNull(),
+    /** Encrypted JSON: app name, package, domain, tracker, data it collects. */
+    detailEnc: text("detail_enc").notNull(),
+    /** Keyed hash of the phone's report: a retried upload isn't stored twice. */
+    dedupeKey: text("dedupe_key"),
+    createdAt: ts("created_at").notNull().defaultNow(),
+  },
+  (t) => [
+    index("intercepts_user_time").on(t.userId, t.lastAt),
+    index("intercepts_user_app").on(t.userId, t.appSlug, t.lastAt),
+    uniqueIndex("intercepts_user_dedupe").on(t.userId, t.dedupeKey),
+  ],
 );
 
 export const vaultCategories = pgTable(

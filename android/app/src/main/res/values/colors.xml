@@ -2,5 +2,5 @@
 <resources>
     <color name="bg">#FFFFFF</color>
     <color name="fg">#0D0D0F</color>
-    <color name="icon_bg">#0D0D0F</color>
+    <color name="icon_bg">#FFFFFF</color>
 </resources>

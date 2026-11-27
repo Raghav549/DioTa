@@ -91,6 +91,11 @@ public class MainActivity extends Activity {
         s.setMediaPlaybackRequiresUserGesture(true);
         s.setUserAgentString(s.getUserAgentString() + " DioTaAndroid/" + BuildConfig.VERSION_NAME);
         s.setSafeBrowsingEnabled(true);
+        // Smooth scrolling: rasterize just-offscreen content ahead of time, and keep the renderer
+        // at high priority while the app is in front.
+        s.setOffscreenPreRaster(true);
+        web.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, true);
+        web.setLayerType(View.LAYER_TYPE_NONE, null); // GPU compositing by the WebView itself (hardware accelerated window)
 
         CookieManager cm = CookieManager.getInstance();
         cm.setAcceptCookie(true);
@@ -101,8 +106,10 @@ public class MainActivity extends Activity {
         web.setWebViewClient(new Client());
         web.setWebChromeClient(new Chrome());
 
+        // Every launch opens at the start page, so the splash always plays (then Home when signed
+        // in, or the intro for someone new on this phone).
         if (savedInstanceState != null) web.restoreState(savedInstanceState);
-        else web.loadUrl(BuildConfig.SITE_URL + "/home");
+        else web.loadUrl(BuildConfig.SITE_URL + "/");
     }
 
     /** Only the DioTa website itself may load inside the app (and use the bridge). */
@@ -285,6 +292,13 @@ public class MainActivity extends Activity {
         super.onResume();
         web.onResume();
         bridge.onResume();
+        // Send blocked attempts that waited while the app was closed (background thread).
+        new Thread(() -> {
+            try {
+                InterceptStore.get(this).flushNow();
+            } catch (Exception ignored) {
+            }
+        }, "dioTa-flush").start();
     }
 
     @Override

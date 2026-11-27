@@ -1,6 +1,5 @@
 "use client";
 import { useMemo, useState } from "react";
-import { motion } from "framer-motion";
 import { TxList, type Tx } from "@/components/Activity";
 import { Chart } from "@/components/Chart";
 import { Icon } from "@/components/Icon";
@@ -80,13 +79,13 @@ export default function WalletPage() {
   return (
     <div className="space-y-4">
       <PageHeader title={t("w.title")} />
-      <motion.section initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="glass relative overflow-hidden p-6" style={{ background: "linear-gradient(150deg, color-mix(in srgb, var(--primary) 30%, transparent), var(--surface) 70%)" }}>
+      <section className="rise glass relative overflow-hidden p-6" style={{ background: "linear-gradient(150deg, color-mix(in srgb, var(--primary) 30%, transparent), var(--surface) 70%)" }}>
         <p className="text-sm font-semibold text-muted">{t("w.balance")}</p>
         <p className="font-display mt-1 text-5xl font-semibold tracking-tight">{money(w.available, locale)}</p>
         <div className="mt-6 flex gap-3">
           <Button full onClick={() => { setMsg(blocked); setOpen(true); }}><Icon name="up" size={18} />{t("w.withdraw")}</Button>
         </div>
-      </motion.section>
+      </section>
 
       {!w.rewardsActive && w.lifetime === 0 && (
         <Card className="!border-warn/40">

@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
-import { eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import {
   auditLogs,
   consents,
+  intercepts,
   sessions,
   supportRequests,
   userAvatars,
@@ -20,11 +21,12 @@ import { publicUser } from "@/lib/auth";
 import { decrypt } from "@/lib/crypto";
 import { appName } from "@/lib/catalog";
 import { audit, recordEvent } from "@/lib/events";
+import { decodeIntercept } from "@/lib/intercepts";
 
 export const GET = authRoute(
   async ({ user }) => {
     const uid = user.id;
-    const [apps, events, items, cats, cons, txs, methods, notifs, sess, audits, support, [avatar]] = await Promise.all([
+    const [apps, events, items, cats, cons, txs, methods, notifs, sess, audits, support, [avatar], caught] = await Promise.all([
       db.select().from(monitoredApps).where(eq(monitoredApps.userId, uid)),
       db.select().from(privacyEvents).where(eq(privacyEvents.userId, uid)),
       db.select().from(vaultItems).where(eq(vaultItems.userId, uid)),
@@ -37,6 +39,7 @@ export const GET = authRoute(
       db.select().from(auditLogs).where(eq(auditLogs.userId, uid)),
       db.select().from(supportRequests).where(eq(supportRequests.userId, uid)),
       db.select().from(userAvatars).where(eq(userAvatars.userId, uid)).limit(1),
+      db.select().from(intercepts).where(eq(intercepts.userId, uid)).orderBy(desc(intercepts.lastAt)),
     ]);
     await audit(uid, "data_export");
     await recordEvent(uid, "export");
@@ -46,11 +49,18 @@ export const GET = authRoute(
       profilePicture: avatar ? `data:${avatar.mime};base64,${avatar.data}` : null,
       apps: apps.map(({ userId, icon, ...a }) => (void userId, { ...a, name: appName(a.slug, a.name), hasPhoneIcon: !!icon })),
       privacyEvents: events.map(({ userId, ...e }) => (void userId, e)),
+      /** Every attempt DioTa's tracker shield blocked on your phone, with what it was after. */
+      blockedAttempts: caught
+        .map((r) => decodeIntercept(uid, r))
+        .filter((x) => x !== null)
+        .map(({ id, ...x }) => (void id, x)),
       vault: items.map((i) => ({
         category: i.category,
+        source: i.sourceKey ? "captured" : "manual",
         label: decrypt(uid, i.labelEnc),
         content: decrypt(uid, i.dataEnc),
         createdAt: i.createdAt,
+        updatedAt: i.updatedAt,
       })),
       vaultSharing: cats.map((c) => ({ category: c.category, mode: c.mode })),
       consents: cons.map((c) => ({ scope: c.scope, granted: c.granted, version: c.version, at: c.createdAt })),

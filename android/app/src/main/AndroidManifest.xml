@@ -26,6 +26,7 @@
 
     <application
         android:allowBackup="false"
+        android:hardwareAccelerated="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="false"
         android:icon="@mipmap/ic_launcher"
@@ -49,7 +50,8 @@
             </intent-filter>
         </activity>
 
-        <!-- On-device firewall: a local VPN that only captures the apps you block and drops their traffic -->
+        <!-- Tracker shield + app firewall: a local VPN. Shield: only DNS lookups pass through it, tracker
+             endpoints are refused. Firewall: the apps you block are captured and their traffic dropped. -->
         <service
             android:name=".FirewallService"
             android:exported="false"

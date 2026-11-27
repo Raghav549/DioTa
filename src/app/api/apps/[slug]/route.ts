@@ -4,6 +4,7 @@ import { monitoredApps, privacyEvents } from "@/db/schema";
 import { ApiError, authRoute, readBody } from "@/lib/api";
 import { SENSITIVE, appName, isAppSlug } from "@/lib/catalog";
 import { publicApp } from "@/lib/apps";
+import { listIntercepts } from "@/lib/intercepts";
 import { audit, notify, recordEvent } from "@/lib/events";
 import { appPatchSchema } from "@/lib/validation";
 
@@ -20,14 +21,19 @@ async function load(userId: string, slug: string) {
 
 export const GET = authRoute<{ slug: string }>(async ({ user, params }) => {
   const a = await load(user.id, params.slug);
-  const events = await db
-    .select()
-    .from(privacyEvents)
-    .where(and(eq(privacyEvents.userId, user.id), eq(privacyEvents.appSlug, a.slug)))
-    .orderBy(desc(privacyEvents.createdAt))
-    .limit(50);
+  const [events, caught] = await Promise.all([
+    db
+      .select()
+      .from(privacyEvents)
+      .where(and(eq(privacyEvents.userId, user.id), eq(privacyEvents.appSlug, a.slug)))
+      .orderBy(desc(privacyEvents.createdAt))
+      .limit(50),
+    // The app's lifetime record of blocked attempts (newest first).
+    listIntercepts(user.id, { app: a.slug, limit: 500 }),
+  ]);
   return {
     app: publicApp(a),
+    intercepts: caught,
     events: events.map((e) => ({ id: e.id, type: e.type, params: e.params, createdAt: e.createdAt.toISOString() })),
   };
 });
